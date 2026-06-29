@@ -164,14 +164,25 @@ if not month_df.empty:
 
     if analysis_mode == "月度动态演变":
         st.subheader("📈 月度出口趋势（同口径月份，多年份叠加对比）")
-        md = month_df_sel[month_df_sel["月份"].isin(months)].copy()
+        show_months = st.multiselect(
+            "筛选要查看的月份（不选则显示全部）", options=months, default=months,
+            key="show_months")
+        if not show_months:
+            show_months = months
+
+        md = month_df_sel[month_df_sel["月份"].isin(show_months)].copy()
         md = md.groupby(["统计年份", "月份"], as_index=False)["金额_美元"].sum()
         md["年份"] = md["统计年份"].astype(str)
         if not md.empty:
-            fig = px.line(md.sort_values(["年份", "月份"]), x="月份", y="金额_美元",
-                          color="年份", markers=True,
-                          title=f"各年 {mlabel} 出口额对比 (USD)")
-            fig.update_layout(xaxis_type="category", xaxis_tickangle=0)
+            if len(show_months) == 1:
+                mb = md.sort_values("统计年份")
+                fig = px.bar(mb, x="年份", y="金额_美元", text_auto=".2s",
+                             title=f"{show_months[0]} 月出口额：各年对比 (USD)")
+            else:
+                fig = px.line(md.sort_values(["年份", "月份"]), x="月份", y="金额_美元",
+                              color="年份", markers=True,
+                              title=f"各年 {'、'.join(str(m) for m in show_months)}月 出口额对比 (USD)")
+                fig.update_layout(xaxis_type="category", xaxis_tickangle=0)
             st.plotly_chart(fig, use_container_width=True)
     else:
         st.subheader(f"📊 历年{plabel}出口额（同口径）")
@@ -213,27 +224,40 @@ if not month_df.empty:
         st.dataframe(rnow[["所属区域", "金额_美元", "上年同期", "金额同比%"]],
                      use_container_width=True, hide_index=True)
 
-    # 历年全年（仅完整年份，来自年度数据；排除不完整的最新年份）
+    # 历年全年：优先用月度数据里『满12个月』的年份汇总出真实全年总额，
+    # 没有月度数据来源的年份再用年度（全年快照）文件补充；不满12个月的年份一律排除。
     if analysis_mode == "历年全年(完整年份)":
         st.markdown("---")
         st.subheader("🗓️ 历年全年出口额（仅完整年份）")
-        if year_df.empty:
-            st.caption("暂无年度（全年）数据文件。")
+
+        month_counts = month_df_sel.groupby("统计年份")["月份"].nunique()
+        full_years_from_month = sorted(int(y) for y in month_counts[month_counts >= 12].index)
+        incomplete_years_from_month = sorted(int(y) for y in month_counts[month_counts < 12].index)
+
+        year_df_sel = year_df[year_df["统计年份"].isin(selected_years)] if selected_years else year_df
+        # 月度已覆盖的年份不重复使用年度快照（避免双计）
+        year_only_years = sorted(set(int(y) for y in year_df_sel["统计年份"].unique())
+                                  - set(month_df_sel["统计年份"].unique()))
+
+        full_parts = []
+        if full_years_from_month:
+            full_parts.append(month_df_sel[month_df_sel["统计年份"].isin(full_years_from_month)])
+        if year_only_years:
+            full_parts.append(year_df_sel[year_df_sel["统计年份"].isin(year_only_years)])
+
+        if not full_parts:
+            st.caption("暂无满12个月的完整年度数据：当前筛选的年份均不足12个月。")
         else:
-            yfull_src = year_df[year_df["统计年份"] < latest]
-            if selected_years:
-                yfull_src = yfull_src[yfull_src["统计年份"].isin(selected_years)]
-            yfull = yoy_table(yfull_src, [])
-            if yfull.empty:
-                st.caption("暂无早于当前年份的完整年度数据。")
-            else:
-                yb = yfull.copy(); yb["年份"] = yb["统计年份"].astype(str)
-                st.plotly_chart(px.bar(yb, x="年份", y="金额_美元", text_auto=".2s",
-                                       title="历年全年出口额"), use_container_width=True)
-                ys = yfull[["统计年份", "金额_美元", "上年同期", "金额同比%"]].copy()
-                ys.columns = ["年份", "全年出口额", "上年", "同比%"]
-                st.dataframe(ys, use_container_width=True, hide_index=True)
-        st.caption(f"注意：{latest} 年尚未完整，已从全年视图中排除，避免与{plabel}数据混比。")
+            yfull = yoy_table(pd.concat(full_parts, ignore_index=True), [])
+            yb = yfull.copy(); yb["年份"] = yb["统计年份"].astype(str)
+            st.plotly_chart(px.bar(yb, x="年份", y="金额_美元", text_auto=".2s",
+                                   title="历年全年出口额"), use_container_width=True)
+            ys = yfull[["统计年份", "金额_美元", "上年同期", "金额同比%"]].copy()
+            ys.columns = ["年份", "全年出口额", "上年", "同比%"]
+            st.dataframe(ys, use_container_width=True, hide_index=True)
+
+        if incomplete_years_from_month:
+            st.caption(f"注意：{incomplete_years_from_month} 年月度数据不满12个月，已从全年视图中排除，避免与全年数据混比。")
 
 # ---------- 没有月度数据：只能快照（如水龙头只有单一年份）----------
 else:
