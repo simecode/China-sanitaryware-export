@@ -124,6 +124,15 @@ if not month_df.empty:
     prev_year = latest - 1
     prev_ok = prev_year in ok_years
 
+    with st.sidebar:
+        st.markdown("---")
+        st.header("📅 年份筛选")
+        selected_years = st.multiselect(
+            f"参与{plabel}同口径对比的年份", options=ok_years, default=ok_years)
+    if not selected_years:
+        selected_years = ok_years
+    sp = sp[sp["统计年份"].isin(selected_years)].copy()
+
     banner = (f"📐 **同口径口径**：{selected_dataset} 最新年份 **{latest}** 含 **{n}** 个月（{mlabel}）。"
               f"所有同比均按【各年相同月份】计算，绝不拿部分月份比往年全年。")
     if not prev_ok:
@@ -152,7 +161,7 @@ if not month_df.empty:
 
     if analysis_mode == "月度动态演变":
         st.subheader("📈 月度出口趋势（同口径月份，多年份叠加对比）")
-        md = month_df[month_df["月份"].isin(months)].copy()
+        md = month_df[month_df["月份"].isin(months) & month_df["统计年份"].isin(selected_years)].copy()
         md = md.groupby(["统计年份", "月份"], as_index=False)["金额_美元"].sum()
         md["年份"] = md["统计年份"].astype(str)
         if not md.empty:
@@ -208,7 +217,10 @@ if not month_df.empty:
         if year_df.empty:
             st.caption("暂无年度（全年）数据文件。")
         else:
-            yfull = yoy_table(year_df[year_df["统计年份"] < latest], [])
+            yfull_src = year_df[year_df["统计年份"] < latest]
+            if selected_years:
+                yfull_src = yfull_src[yfull_src["统计年份"].isin(selected_years)]
+            yfull = yoy_table(yfull_src, [])
             if yfull.empty:
                 st.caption("暂无早于当前年份的完整年度数据。")
             else:
