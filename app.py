@@ -117,23 +117,26 @@ def yoy_table(df, group_cols):
 
 # ================= 主体 =================
 if not month_df.empty:
-    latest, months, ok_years, sp = same_period_pool(month_df)
+    all_years = sorted(int(y) for y in month_df["统计年份"].dropna().unique())
+    with st.sidebar:
+        st.markdown("---")
+        st.header("📅 年份筛选")
+        selected_years = st.multiselect(
+            "参与对比的年份", options=all_years, default=all_years)
+    if not selected_years:
+        selected_years = all_years
+
+    # —— 基准年份/月份均由当前选中的年份动态决定：去掉某年后，
+    #    自动改用剩余年份里最新的那一年的月份集合作为同口径基准，无需改代码 ——
+    month_df_sel = month_df[month_df["统计年份"].isin(selected_years)]
+    latest, months, ok_years, sp = same_period_pool(month_df_sel)
     n = len(months)
     mlabel = "、".join(str(m) for m in months) + "月"
     plabel = f"前{n}月"
     prev_year = latest - 1
     prev_ok = prev_year in ok_years
 
-    with st.sidebar:
-        st.markdown("---")
-        st.header("📅 年份筛选")
-        selected_years = st.multiselect(
-            f"参与{plabel}同口径对比的年份", options=ok_years, default=ok_years)
-    if not selected_years:
-        selected_years = ok_years
-    sp = sp[sp["统计年份"].isin(selected_years)].copy()
-
-    banner = (f"📐 **同口径口径**：{selected_dataset} 最新年份 **{latest}** 含 **{n}** 个月（{mlabel}）。"
+    banner = (f"📐 **同口径口径**：{selected_dataset} 当前筛选下最新年份 **{latest}** 含 **{n}** 个月（{mlabel}）。"
               f"所有同比均按【各年相同月份】计算，绝不拿部分月份比往年全年。")
     if not prev_ok:
         banner += (f" ⚠️ 缺少 **{prev_year} 年的月度数据**，{latest} 年{plabel}同比暂时无法计算——"
@@ -161,7 +164,7 @@ if not month_df.empty:
 
     if analysis_mode == "月度动态演变":
         st.subheader("📈 月度出口趋势（同口径月份，多年份叠加对比）")
-        md = month_df[month_df["月份"].isin(months) & month_df["统计年份"].isin(selected_years)].copy()
+        md = month_df_sel[month_df_sel["月份"].isin(months)].copy()
         md = md.groupby(["统计年份", "月份"], as_index=False)["金额_美元"].sum()
         md["年份"] = md["统计年份"].astype(str)
         if not md.empty:
