@@ -14,11 +14,70 @@ DATASETS = {
     "水龙头/龙头": "data/default_faucet.parquet",
 }
 
-st.set_page_config(page_title="卫浴行业数据观察智库", layout="wide")
-st.title("📊 卫浴与泛家居进出口多维洞察大屏")
+st.set_page_config(page_title="卫浴行业数据观察智库", layout="wide", page_icon="📊")
+
+# ================= 全局样式 =================
+st.markdown("""
+<style>
+/* 主背景 */
+[data-testid="stAppViewContainer"] { background: #f0f4f8; }
+[data-testid="stSidebar"] { background: linear-gradient(180deg,#1a2740 0%,#243352 100%); }
+[data-testid="stSidebar"] * { color: #e8edf5 !important; }
+[data-testid="stSidebar"] .stMarkdown hr { border-color: #3a4d6e; }
+
+/* 顶部大标题栏 */
+.top-banner {
+    background: linear-gradient(135deg,#1a2740 0%,#1e4d8c 60%,#2563b0 100%);
+    border-radius: 12px; padding: 28px 36px 20px 36px;
+    margin-bottom: 20px; box-shadow: 0 4px 18px rgba(30,77,140,.25);
+}
+.top-banner h1 { color:#ffffff; font-size:2rem; font-weight:700; margin:0; letter-spacing:.5px; }
+.top-banner p  { color:#b8d0f0; font-size:.92rem; margin:6px 0 0 0; }
+
+/* 指标卡片 */
+[data-testid="metric-container"] {
+    background:#ffffff; border-radius:10px;
+    padding:16px 20px; border-left:4px solid #1e4d8c;
+    box-shadow:0 2px 8px rgba(0,0,0,.07);
+}
+[data-testid="metric-container"] label { color:#6b7a99 !important; font-size:.82rem !important; }
+[data-testid="metric-container"] [data-testid="stMetricValue"] { color:#1a2740 !important; font-weight:700; }
+
+/* 分割线 */
+hr { border-color:#d5dce8; }
+
+/* dataframe */
+[data-testid="stDataFrame"] { border-radius:8px; overflow:hidden; }
+
+/* 页脚 */
+.footer {
+    background:linear-gradient(90deg,#1a2740,#1e4d8c);
+    border-radius:10px; padding:18px 28px;
+    margin-top:36px; color:#b8d0f0; font-size:.85rem;
+    display:flex; justify-content:space-between; align-items:center;
+}
+.footer a { color:#7ec8f0; text-decoration:none; }
+</style>
+""", unsafe_allow_html=True)
+
+# ================= 顶部标题栏 =================
+st.markdown("""
+<div class="top-banner">
+  <h1>📊 卫浴与泛家居进出口多维洞察大屏</h1>
+  <p>China Sanitaryware &amp; Home Export Intelligence · 数据来源：海关出口月度统计</p>
+</div>
+""", unsafe_allow_html=True)
 
 # ================= 侧边栏 =================
 with st.sidebar:
+    st.markdown("""
+    <div style="text-align:center;padding:16px 0 8px 0;">
+      <div style="font-size:2rem;">📊</div>
+      <div style="font-weight:700;font-size:1rem;color:#e8edf5;letter-spacing:.5px;">卫浴出口智库</div>
+      <div style="font-size:.75rem;color:#7a9cc4;margin-top:2px;">China Sanitaryware Export</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("---")
     st.header("⚙️ 引擎配置")
     analysis_mode = st.radio("选择分析维度", ["同口径(前N月)对比", "月度动态演变", "历年全年(完整年份)"])
 
@@ -32,6 +91,16 @@ with st.sidebar:
     use_builtin = st.checkbox("📊 使用内置默认数据（无需上传）", value=True)
     selected_dataset = (st.selectbox("选择内置数据集", options=list(DATASETS.keys()), index=0)
                         if use_builtin else None)
+
+    st.markdown("---")
+    st.markdown("""
+    <div style="padding:12px 4px 4px 4px;">
+      <div style="font-size:.78rem;color:#7a9cc4;margin-bottom:6px;letter-spacing:.5px;">ABOUT</div>
+      <div style="color:#e8edf5;font-size:.88rem;font-weight:600;">👤 作者：sze</div>
+      <div style="color:#b8d0f0;font-size:.82rem;margin-top:4px;">📱 交流：137-6076-5317</div>
+      <div style="color:#7a9cc4;font-size:.75rem;margin-top:8px;">数据仅供研究参考，不构成商业建议</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3600)
@@ -397,5 +466,16 @@ else:
             u = u[u["金额_美元"] > 0].sort_values("出口单价（美元/单位）", ascending=False).head(10)
             st.dataframe(u, use_container_width=True, hide_index=True)
 
-st.caption("同比口径与已验证的 6910 月度脚本一致：各年取相同月份汇总后逐年同比；"
-           "缺月度数据的年份不参与同比，避免『部分年 vs 全年』的错误暴跌。")
+st.markdown("""
+<div class="footer">
+  <div>
+    <span style="font-size:1rem;font-weight:600;color:#e8edf5;">📊 卫浴与泛家居进出口多维洞察大屏</span><br>
+    <span style="font-size:.78rem;">同比口径说明：各年取相同月份汇总后逐年同比，缺月度数据的年份不参与同比，避免「部分年 vs 全年」的错误对比。</span>
+  </div>
+  <div style="text-align:right;line-height:1.8;">
+    <span style="color:#e8edf5;font-weight:600;">作者：sze</span><br>
+    <span>📱 交流：<a href="tel:13760765317">137-6076-5317</a></span><br>
+    <span style="font-size:.75rem;color:#7a9cc4;">数据来源：中国海关出口统计 · 仅供研究参考</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
