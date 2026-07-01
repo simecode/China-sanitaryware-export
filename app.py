@@ -231,6 +231,100 @@ if not month_df.empty:
         st.dataframe(rnow[["所属区域", "金额_美元", "上年同期", "金额同比%"]],
                      use_container_width=True, hide_index=True)
 
+    # ===== 新增分析维度 =====
+    if prev_ok:
+        st.markdown("---")
+
+        # ── 1. 增长贡献分解 ──────────────────────────────────────────
+        st.subheader(f"📉 增长贡献分解：{prev_year}→{latest} 各区域拉动/拖累")
+        r_cur  = region_sp[region_sp["统计年份"] == latest ][["所属区域","金额_美元"]].rename(columns={"金额_美元":"今年"})
+        r_prev = region_sp[region_sp["统计年份"] == prev_year][["所属区域","金额_美元"]].rename(columns={"金额_美元":"去年"})
+        contrib = r_cur.merge(r_prev, on="所属区域", how="outer").fillna(0)
+        contrib["贡献额"] = contrib["今年"] - contrib["去年"]
+        contrib["方向"]   = contrib["贡献额"].apply(lambda x: "拉动" if x >= 0 else "拖累")
+        contrib["贡献率%"] = (contrib["贡献额"] / abs(contrib["贡献额"]).sum() * 100).round(1)
+        contrib = contrib.sort_values("贡献额")
+        fig_c = px.bar(contrib, x="贡献额", y="所属区域", orientation="h",
+                       color="方向", color_discrete_map={"拉动":"#2ecc71","拖累":"#e74c3c"},
+                       text=contrib["贡献额"].apply(lambda v: f"{'+'if v>=0 else ''}{v/1e6:.1f}M"),
+                       title=f"{prev_year}→{latest} 各区域对总出口变化的贡献（USD）")
+        fig_c.update_traces(textposition="outside")
+        fig_c.update_layout(showlegend=True, xaxis_title="贡献额（USD）")
+        st.plotly_chart(fig_c, use_container_width=True)
+        cshow = contrib[["所属区域","去年","今年","贡献额","贡献率%"]].sort_values("贡献额", ascending=False)
+        cshow.columns = ["区域","去年同期","今年","贡献额","贡献占比%"]
+        st.dataframe(cshow, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # ── 2. 市场份额变化 ──────────────────────────────────────────
+        st.subheader(f"🔄 市场份额迁移：{prev_year}→{latest} 各区域占比变化（百分点）")
+        share_cur  = region_sp[region_sp["统计年份"] == latest ][["所属区域","金额份额%"]].rename(columns={"金额份额%":"今年份额%"})
+        share_prev = region_sp[region_sp["统计年份"] == prev_year][["所属区域","金额份额%"]].rename(columns={"金额份额%":"去年份额%"})
+        share = share_cur.merge(share_prev, on="所属区域", how="outer").fillna(0)
+        share["份额变化ppt"] = (share["今年份额%"] - share["去年份额%"]).round(2)
+        share["方向"] = share["份额变化ppt"].apply(lambda x: "提升" if x >= 0 else "下降")
+        share = share.sort_values("份额变化ppt")
+        fig_s = px.bar(share, x="份额变化ppt", y="所属区域", orientation="h",
+                       color="方向", color_discrete_map={"提升":"#3498db","下降":"#e67e22"},
+                       text=share["份额变化ppt"].apply(lambda v: f"{'+'if v>=0 else ''}{v:.1f}ppt"),
+                       title=f"各区域出口份额变化（百分点）")
+        fig_s.update_traces(textposition="outside")
+        fig_s.update_layout(xaxis_title="份额变化（ppt）")
+        st.plotly_chart(fig_s, use_container_width=True)
+
+        st.markdown("---")
+
+        # ── 3. 新兴市场 vs 萎缩市场（国家粒度） ────────────────────
+        st.subheader(f"🌱 新兴市场 & 萎缩市场（{prev_year}→{latest}，国家粒度）")
+        p_cur  = partner_sp[partner_sp["统计年份"] == latest ][["贸易伙伴名称","所属区域","金额_美元","金额同比%"]]
+        p_prev = partner_sp[partner_sp["统计年份"] == prev_year][["贸易伙伴名称","金额_美元"]].rename(columns={"金额_美元":"去年金额"})
+        p_join = p_cur.merge(p_prev, on="贸易伙伴名称", how="left")
+
+        new_markets = p_cur[~p_cur["贸易伙伴名称"].isin(p_prev["贸易伙伴名称"])].sort_values("金额_美元", ascending=False).head(10)
+        lost_markets_prev = partner_sp[partner_sp["统计年份"] == prev_year][["贸易伙伴名称","金额_美元"]]
+        lost_markets = lost_markets_prev[~lost_markets_prev["贸易伙伴名称"].isin(
+            partner_sp[partner_sp["统计年份"] == latest]["贸易伙伴名称"])].sort_values("金额_美元", ascending=False).head(10)
+
+        with_both = p_join.dropna(subset=["金额同比%"]).copy()
+        risers  = with_both.sort_values("金额同比%", ascending=False).head(10)
+        fallers = with_both.sort_values("金额同比%", ascending=True ).head(10)
+
+        c3a, c3b = st.columns(2)
+        with c3a:
+            st.markdown(f"**🚀 增速最快 TOP10（同比增长%）**")
+            if not risers.empty:
+                fig_r = px.bar(risers.sort_values("金额同比%"), x="金额同比%", y="贸易伙伴名称",
+                               orientation="h", color="所属区域", text_auto=".1f")
+                fig_r.update_layout(xaxis_title="同比增长%", yaxis_title="")
+                st.plotly_chart(fig_r, use_container_width=True)
+        with c3b:
+            st.markdown(f"**📉 跌幅最大 TOP10（同比下滑%）**")
+            if not fallers.empty:
+                fig_f = px.bar(fallers.sort_values("金额同比%", ascending=False), x="金额同比%", y="贸易伙伴名称",
+                               orientation="h", color="所属区域", text_auto=".1f",
+                               color_discrete_sequence=px.colors.qualitative.Set2)
+                fig_f.update_layout(xaxis_title="同比增长%", yaxis_title="")
+                st.plotly_chart(fig_f, use_container_width=True)
+
+        c3c, c3d = st.columns(2)
+        with c3c:
+            st.markdown(f"**🌱 新进入市场（{latest}年新增，{prev_year}年无记录）**")
+            if not new_markets.empty:
+                st.dataframe(new_markets[["贸易伙伴名称","所属区域","金额_美元"]].rename(
+                    columns={"金额_美元":"出口额"}), use_container_width=True, hide_index=True)
+            else:
+                st.caption("无新进入市场")
+        with c3d:
+            st.markdown(f"**⚠️ 退出市场（{prev_year}年有，{latest}年无记录）**")
+            if not lost_markets.empty:
+                st.dataframe(lost_markets[["贸易伙伴名称","金额_美元"]].rename(
+                    columns={"金额_美元":"去年出口额"}), use_container_width=True, hide_index=True)
+            else:
+                st.caption("无退出市场")
+
+    st.markdown("---")
+
     # 历年全年：优先用月度数据里『满12个月』的年份汇总出真实全年总额，
     # 没有月度数据来源的年份再用年度（全年快照）文件补充；不满12个月的年份一律排除。
     if analysis_mode == "历年全年(完整年份)":
