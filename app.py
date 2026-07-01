@@ -1,10 +1,18 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.io as pio
 import numpy as np
 import os
 import warnings
 warnings.filterwarnings('ignore')
+
+# —— 图表统一走深色科技风：透明背景 + 青色系配色 ——
+pio.templates.default = "plotly_dark"
+pio.templates["plotly_dark"].layout.paper_bgcolor = "rgba(0,0,0,0)"
+pio.templates["plotly_dark"].layout.plot_bgcolor = "rgba(0,0,0,0)"
+pio.templates["plotly_dark"].layout.font.color = "#c8d4e6"
+px.defaults.color_continuous_scale = "Teal"
 
 MAPPING_FILE_NAME = "区域映射表.xlsx"
 
@@ -16,47 +24,134 @@ DATASETS = {
 
 st.set_page_config(page_title="卫浴行业数据观察智库", layout="wide", page_icon="📊")
 
-# ================= 全局样式 =================
+# ================= 全局样式（深色科技风）=================
 st.markdown("""
 <style>
-/* 主背景 */
-[data-testid="stAppViewContainer"] { background: #f0f4f8; }
-[data-testid="stSidebar"] { background: linear-gradient(180deg,#1a2740 0%,#243352 100%); }
-[data-testid="stSidebar"] * { color: #e8edf5 !important; }
-[data-testid="stSidebar"] .stMarkdown hr { border-color: #3a4d6e; }
+/* 主背景：深蓝黑 + 青色/绿色径向辉光 + 细网格 */
+[data-testid="stAppViewContainer"] {
+    background:
+      radial-gradient(1100px 600px at 12% -8%, rgba(34,211,238,.10), transparent 60%),
+      radial-gradient(900px 520px at 100% 0%, rgba(52,211,153,.08), transparent 55%),
+      linear-gradient(180deg,#070b16 0%,#0a0f1e 100%);
+    background-attachment: fixed;
+}
+[data-testid="stAppViewContainer"]::before {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(circle at 50% 0%, black, transparent 75%);
+}
+.block-container { position:relative; z-index:1; }
 
-/* 顶部大标题栏 */
+/* 侧边栏：暗玻璃 + 右侧青色分隔 */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg,#0a1122 0%,#0b1426 100%);
+    border-right: 1px solid rgba(34,211,238,.16);
+}
+[data-testid="stSidebar"] .stMarkdown hr { border-color: rgba(34,211,238,.14); }
+[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    color:#dbe6f5 !important; font-size:.95rem !important; letter-spacing:.4px;
+}
+
+/* 顶部品牌标题栏：暗玻璃卡 + 青色左描边辉光 */
 .top-banner {
-    background: linear-gradient(135deg,#1a2740 0%,#1e4d8c 60%,#2563b0 100%);
-    border-radius: 12px; padding: 28px 36px 20px 36px;
-    margin-bottom: 20px; box-shadow: 0 4px 18px rgba(30,77,140,.25);
+    position:relative; overflow:hidden;
+    background: linear-gradient(135deg, rgba(17,26,48,.92) 0%, rgba(10,15,30,.92) 100%);
+    border:1px solid rgba(34,211,238,.22);
+    border-radius:16px; padding:26px 34px 22px 34px; margin-bottom:22px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 10px 40px rgba(0,0,0,.45),
+                inset 0 1px 0 rgba(255,255,255,.04);
 }
-.top-banner h1 { color:#ffffff; font-size:2rem; font-weight:700; margin:0; letter-spacing:.5px; }
-.top-banner p  { color:#b8d0f0; font-size:.92rem; margin:6px 0 0 0; }
+.top-banner::after {
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:linear-gradient(180deg,#22d3ee,#34d399);
+    box-shadow:0 0 18px rgba(34,211,238,.7);
+}
+.top-banner h1 {
+    color:#f2f7ff; font-size:1.9rem; font-weight:800; margin:0; letter-spacing:.5px;
+    text-shadow:0 0 22px rgba(34,211,238,.25);
+}
+.top-banner .subtitle {
+    color:#8fb6d6; font-size:.85rem; margin:8px 0 0 0; letter-spacing:2px;
+    text-transform:uppercase; font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;
+}
+.top-banner .tag {
+    display:inline-block; margin-top:12px; padding:3px 12px; font-size:.72rem;
+    color:#22d3ee; border:1px solid rgba(34,211,238,.35); border-radius:20px;
+    background:rgba(34,211,238,.07); letter-spacing:1px;
+}
 
-/* 指标卡片 */
-[data-testid="metric-container"] {
-    background:#ffffff; border-radius:10px;
-    padding:16px 20px; border-left:4px solid #1e4d8c;
-    box-shadow:0 2px 8px rgba(0,0,0,.07);
+/* 指标卡片：暗玻璃 + 青色左边 + 辉光 */
+[data-testid="stMetric"], [data-testid="metric-container"] {
+    background: linear-gradient(160deg, rgba(20,29,52,.85), rgba(12,18,34,.85));
+    border:1px solid rgba(120,160,220,.14);
+    border-left:3px solid #22d3ee;
+    border-radius:12px; padding:16px 20px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.35), 0 0 24px rgba(34,211,238,.06);
+    transition: box-shadow .25s, transform .25s;
 }
-[data-testid="metric-container"] label { color:#6b7a99 !important; font-size:.82rem !important; }
-[data-testid="metric-container"] [data-testid="stMetricValue"] { color:#1a2740 !important; font-weight:700; }
+[data-testid="stMetric"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(0,0,0,.5), 0 0 28px rgba(34,211,238,.18);
+}
+[data-testid="stMetric"] label { color:#8ba0c4 !important; font-size:.8rem !important; letter-spacing:.5px; }
+[data-testid="stMetricValue"] { color:#eaf3ff !important; font-weight:800; text-shadow:0 0 16px rgba(34,211,238,.2); }
+
+/* 标题强调 */
+h2, h3 { color:#e9f1fb; }
+[data-testid="stAppViewContainer"] h3 { letter-spacing:.3px; }
 
 /* 分割线 */
-hr { border-color:#d5dce8; }
+hr { border-color: rgba(120,160,220,.16); }
+
+/* 信息条 */
+[data-testid="stAlert"] {
+    background: rgba(34,211,238,.06) !important;
+    border:1px solid rgba(34,211,238,.2) !important; border-radius:10px;
+}
 
 /* dataframe */
-[data-testid="stDataFrame"] { border-radius:8px; overflow:hidden; }
-
-/* 页脚 */
-.footer {
-    background:linear-gradient(90deg,#1a2740,#1e4d8c);
-    border-radius:10px; padding:18px 28px;
-    margin-top:36px; color:#b8d0f0; font-size:.85rem;
-    display:flex; justify-content:space-between; align-items:center;
+[data-testid="stDataFrame"] {
+    border-radius:10px; overflow:hidden; border:1px solid rgba(120,160,220,.12);
 }
-.footer a { color:#7ec8f0; text-decoration:none; }
+
+/* 页脚：暗玻璃 + 青绿描边辉光 */
+.footer {
+    position:relative; overflow:hidden;
+    background:linear-gradient(135deg, rgba(17,26,48,.92), rgba(10,15,30,.92));
+    border:1px solid rgba(34,211,238,.22);
+    border-radius:14px; padding:22px 30px; margin-top:44px;
+    color:#9fc0dd; font-size:.85rem;
+    display:flex; justify-content:space-between; align-items:center; gap:20px;
+    box-shadow:0 10px 40px rgba(0,0,0,.45);
+}
+.footer::before {
+    content:""; position:absolute; left:0; right:0; top:0; height:2px;
+    background:linear-gradient(90deg,#22d3ee,#34d399,transparent);
+    box-shadow:0 0 14px rgba(34,211,238,.6);
+}
+.footer a { color:#22d3ee; text-decoration:none; }
+.footer a:hover { text-shadow:0 0 10px rgba(34,211,238,.6); }
+
+/* 品牌 LOGO 区 */
+.brand {
+    text-align:center; padding:14px 0 6px 0;
+}
+.brand .logo {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:52px; height:52px; border-radius:14px; margin-bottom:8px;
+    background:linear-gradient(135deg, rgba(34,211,238,.18), rgba(52,211,153,.12));
+    border:1px solid rgba(34,211,238,.4); font-size:1.6rem;
+    box-shadow:0 0 22px rgba(34,211,238,.3);
+}
+.brand .name {
+    font-weight:800; font-size:1.05rem; color:#eaf3ff; letter-spacing:3px;
+    font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;
+    text-shadow:0 0 16px rgba(34,211,238,.3);
+}
+.brand .name b { color:#22d3ee; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,17 +159,17 @@ hr { border-color:#d5dce8; }
 st.markdown("""
 <div class="top-banner">
   <h1>📊 卫浴与泛家居进出口多维洞察大屏</h1>
-  <p>China Sanitaryware &amp; Home Export Intelligence · 数据来源：海关出口月度统计</p>
+  <div class="subtitle">Sanitaryware &amp; Home Export Intelligence</div>
+  <div class="tag">◆ 数据来源：海关出口月度统计</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ================= 侧边栏 =================
 with st.sidebar:
     st.markdown("""
-    <div style="text-align:center;padding:16px 0 8px 0;">
-      <div style="font-size:2rem;">📊</div>
-      <div style="font-weight:700;font-size:1rem;color:#e8edf5;letter-spacing:.5px;">卫浴出口智库</div>
-      <div style="font-size:.75rem;color:#7a9cc4;margin-top:2px;">China Sanitaryware Export</div>
+    <div class="brand">
+      <div class="logo">📊</div>
+      <div class="name">SANITARY<b>WARE</b></div>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
@@ -92,15 +187,26 @@ with st.sidebar:
     selected_dataset = (st.selectbox("选择内置数据集", options=list(DATASETS.keys()), index=0)
                         if use_builtin else None)
 
-    st.markdown("---")
-    st.markdown("""
-    <div style="padding:12px 4px 4px 4px;">
-      <div style="font-size:.78rem;color:#7a9cc4;margin-bottom:6px;letter-spacing:.5px;">ABOUT</div>
-      <div style="color:#e8edf5;font-size:.88rem;font-weight:600;">👤 作者：sze</div>
-      <div style="color:#b8d0f0;font-size:.82rem;margin-top:4px;">📱 交流：137-6076-5317</div>
-      <div style="color:#7a9cc4;font-size:.75rem;margin-top:8px;">数据仅供研究参考，不构成商业建议</div>
-    </div>
-    """, unsafe_allow_html=True)
+
+def render_about():
+    """作者/联系卡片——渲染在侧边栏最底部（在所有筛选控件之后）。"""
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("""
+        <div style="padding:14px 12px;border:1px solid rgba(34,211,238,.22);border-radius:12px;
+                    background:linear-gradient(160deg,rgba(20,29,52,.7),rgba(12,18,34,.7));
+                    box-shadow:0 0 22px rgba(34,211,238,.06);">
+          <div style="font-size:.72rem;color:#22d3ee;letter-spacing:2px;margin-bottom:8px;
+                      font-family:ui-monospace,Consolas,monospace;">◆ ABOUT</div>
+          <div style="color:#eaf3ff;font-size:.9rem;font-weight:700;">👤 作者 · sze</div>
+          <div style="color:#9fc0dd;font-size:.84rem;margin-top:6px;">
+            📱 交流 · <a href="tel:13760765317" style="color:#22d3ee;text-decoration:none;">137-6076-5317</a>
+          </div>
+          <div style="color:#6f89ac;font-size:.72rem;margin-top:10px;line-height:1.5;">
+            数据仅供研究参考<br>不构成商业建议
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3600)
@@ -466,16 +572,19 @@ else:
             u = u[u["金额_美元"] > 0].sort_values("出口单价（美元/单位）", ascending=False).head(10)
             st.dataframe(u, use_container_width=True, hide_index=True)
 
+# 作者卡片渲染在侧边栏最底部（此时所有筛选控件已加入侧边栏）
+render_about()
+
 st.markdown("""
 <div class="footer">
   <div>
-    <span style="font-size:1rem;font-weight:600;color:#e8edf5;">📊 卫浴与泛家居进出口多维洞察大屏</span><br>
+    <span style="font-size:1rem;font-weight:700;color:#eaf3ff;">📊 卫浴与泛家居进出口多维洞察大屏</span><br>
     <span style="font-size:.78rem;">同比口径说明：各年取相同月份汇总后逐年同比，缺月度数据的年份不参与同比，避免「部分年 vs 全年」的错误对比。</span>
   </div>
   <div style="text-align:right;line-height:1.8;">
-    <span style="color:#e8edf5;font-weight:600;">作者：sze</span><br>
-    <span>📱 交流：<a href="tel:13760765317">137-6076-5317</a></span><br>
-    <span style="font-size:.75rem;color:#7a9cc4;">数据来源：中国海关出口统计 · 仅供研究参考</span>
+    <span style="color:#22d3ee;font-weight:700;">作者 · sze</span><br>
+    <span>📱 交流 · <a href="tel:13760765317">137-6076-5317</a></span><br>
+    <span style="font-size:.75rem;color:#6f89ac;">数据来源：海关出口统计 · 仅供研究参考</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
