@@ -126,21 +126,34 @@ if not month_df.empty:
     if not selected_years:
         selected_years = all_years
 
-    # —— 基准年份/月份均由当前选中的年份动态决定：去掉某年后，
-    #    自动改用剩余年份里最新的那一年的月份集合作为同口径基准，无需改代码 ——
+    # —— 基准年份/月份均由当前选中的年份动态决定 ——
     month_df_sel = month_df[month_df["统计年份"].isin(selected_years)]
     latest, months, ok_years, sp = same_period_pool(month_df_sel)
-    n = len(months)
-    mlabel = "、".join(str(m) for m in months) + "月"
-    plabel = f"前{n}月"
     prev_year = latest - 1
     prev_ok = prev_year in ok_years
 
-    banner = (f"📐 **同口径口径**：{selected_dataset} 当前筛选下最新年份 **{latest}** 含 **{n}** 个月（{mlabel}）。"
-              f"所有同比均按【各年相同月份】计算，绝不拿部分月份比往年全年。")
+    # 月份筛选：放侧边栏，影响全页所有指标/图表
+    with st.sidebar:
+        st.markdown("---")
+        st.header("📅 月份筛选")
+        show_months = st.multiselect(
+            "参与对比的月份", options=months, default=months)
+    if not show_months:
+        show_months = months
+
+    # 用 show_months 重新过滤 sp，让 KPI / TOP10 / 区域等全部联动
+    sp = sp[sp["月份"].isin(show_months)].copy()
+    n = len(show_months)
+    show_months_sorted = sorted(show_months)
+    mlabel = "、".join(str(m) for m in show_months_sorted) + "月"
+    # 连续的前N月用"前N月"，否则直接列出月份
+    is_prefix = show_months_sorted == list(range(1, n + 1))
+    plabel = f"前{n}月" if is_prefix else mlabel
+
+    banner = (f"📐 **同口径口径**：{selected_dataset} 当前筛选下最新年份 **{latest}**，"
+              f"展示月份 **{mlabel}**。所有同比均按【各年相同月份】计算，绝不拿部分月份比往年全年。")
     if not prev_ok:
-        banner += (f" ⚠️ 缺少 **{prev_year} 年的月度数据**，{latest} 年{plabel}同比暂时无法计算——"
-                   f"请把 {prev_year} 年 {mlabel} 的月度数据(含『数据年月』)放进 raw_data 后重跑 prepare。")
+        banner += (f" ⚠️ 缺少 **{prev_year} 年的月度数据**，{latest} 年同比暂时无法计算。")
     st.info(banner)
 
     annual_sp = yoy_table(sp, [])
@@ -164,12 +177,6 @@ if not month_df.empty:
 
     if analysis_mode == "月度动态演变":
         st.subheader("📈 月度出口趋势（同口径月份，多年份叠加对比）")
-        show_months = st.multiselect(
-            "筛选要查看的月份（不选则显示全部）", options=months, default=months,
-            key="show_months")
-        if not show_months:
-            show_months = months
-
         md = month_df_sel[month_df_sel["月份"].isin(show_months)].copy()
         md = md.groupby(["统计年份", "月份"], as_index=False)["金额_美元"].sum()
         md["年份"] = md["统计年份"].astype(str)
