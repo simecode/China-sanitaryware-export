@@ -7,20 +7,23 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
-# —— 图表统一走 Iris 深紫风：透明背景 + 青/薄荷/淡紫配色 ——
-IRIS_SEQ = ["#00b1ff", "#00ffaa", "#b1a6f6", "#5350cc", "#7a86ff",
-            "#3fd0ff", "#8fe9c8", "#403cd5", "#c9b8ff", "#00c2c2"]
-_t = pio.templates["plotly_dark"]
+# —— 图表统一走 Ventriloc 编辑风：白底 + 墨黑/暖灰 + 橙/黄铜点睛 ——
+# 近乎单色（graphite/steel/slate 灰阶）+ Ember 橙 + Brass 黄铜为暖色点缀
+EDIT_SEQ = ["#ff682c", "#816729", "#202020", "#4d4d4d", "#828282",
+            "#b5651d", "#c9a227", "#a6a6a6", "#5c4a1f", "#d98a5c"]
+_t = pio.templates["plotly_white"]
 _t.layout.paper_bgcolor = "rgba(0,0,0,0)"
 _t.layout.plot_bgcolor = "rgba(0,0,0,0)"
-_t.layout.font.color = "#c3c6e6"
-_t.layout.font.family = "-apple-system, 'Segoe UI', Roboto, sans-serif"
-_t.layout.xaxis.gridcolor = "rgba(177,166,246,.12)"
-_t.layout.yaxis.gridcolor = "rgba(177,166,246,.12)"
-_t.layout.colorway = IRIS_SEQ
-pio.templates.default = "plotly_dark"
-px.defaults.color_discrete_sequence = IRIS_SEQ
-px.defaults.color_continuous_scale = "Purpor"
+_t.layout.font.color = "#202020"
+_t.layout.font.family = "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+_t.layout.xaxis.gridcolor = "#e8e8e8"
+_t.layout.yaxis.gridcolor = "#e8e8e8"
+_t.layout.xaxis.linecolor = "#e8e8e8"
+_t.layout.yaxis.linecolor = "#e8e8e8"
+_t.layout.colorway = EDIT_SEQ
+pio.templates.default = "plotly_white"
+px.defaults.color_discrete_sequence = EDIT_SEQ
+px.defaults.color_continuous_scale = "Oranges"
 
 MAPPING_FILE_NAME = "区域映射表.xlsx"
 
@@ -32,148 +35,140 @@ DATASETS = {
 
 st.set_page_config(page_title="卫浴行业数据观察智库", layout="wide", page_icon="📊")
 
-# ================= 全局样式（Iris 深紫 · 参考 Impilo）=================
+# ================= 全局样式（Ventriloc 编辑风 · 暖白纸底 + 橙色点睛）=================
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500&display=swap');
 :root{
-  --iris-bg:#16165c; --iris-surface:#232269; --iris-glow:#403cd5;
-  --iris-pulse:#5350cc; --iris-border:#4846c6;
-  --cyan:#00b1ff; --mint:#00ffaa; --lilac:#b1a6f6;
-  --fog:#9494a9; --ink:#eef0fb; --ink-soft:#b7b9d8;
+  --graphite:#202020; --canvas:#ffffff; --ash:#efefef; --fog:#f5f5f5;
+  --ivory:#ebe6dd; --steel:#4d4d4d; --slate:#828282; --mist:#e8e8e8;
+  --ember:#ff682c; --brass:#816729;
+  --font-display:'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-body:'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* 主背景：深紫 iris，柔和径向提亮，无网格无发光 */
-[data-testid="stAppViewContainer"]{
-  background:
-    radial-gradient(1200px 700px at 15% -10%, rgba(80,76,205,.35), transparent 60%),
-    radial-gradient(900px 600px at 100% 0%, rgba(0,177,255,.10), transparent 55%),
-    #16165c;
-  background-attachment:fixed;
-}
-.block-container{ position:relative; z-index:1; }
+html, body, [data-testid="stAppViewContainer"] * { font-family:var(--font-body); }
 
-/* 侧边栏：略深的 iris 面，1px 细描边 */
-[data-testid="stSidebar"]{
-  background:#13134f;
-  border-right:1px solid var(--iris-border);
-}
-[data-testid="stSidebar"] .stMarkdown hr{ border-color:rgba(72,70,198,.5); }
+/* 主背景：纯白画布 */
+[data-testid="stAppViewContainer"]{ background:var(--canvas); }
+.block-container{ padding-top:2.4rem; max-width:1280px; }
+
+/* 侧边栏：Ash 暖灰面，右侧细描边 */
+[data-testid="stSidebar"]{ background:var(--ash); border-right:1px solid var(--mist); }
+[data-testid="stSidebar"] .stMarkdown hr{ border-color:var(--mist); }
 [data-testid="stSidebar"] h2,[data-testid="stSidebar"] h3{
-  color:var(--ink) !important; font-size:.95rem !important; letter-spacing:.2px; font-weight:600;
+  color:var(--graphite) !important; font-family:var(--font-display);
+  font-size:.9rem !important; font-weight:500; letter-spacing:-.01em;
 }
 
-/* 顶部品牌栏：iris-surface 卡，24px 圆角，1px 细描边，无阴影 */
+/* 顶部页头：编辑式，无填充盒，白底 + 细体大标题 + 底部墨线 */
 .top-banner{
-  background:var(--iris-surface);
-  border:1px solid var(--iris-border);
-  border-radius:24px; padding:30px 36px 26px; margin-bottom:24px;
+  padding:6px 2px 22px; margin-bottom:8px;
+  border-bottom:1px solid var(--graphite);
 }
 .top-banner h1{
-  color:var(--ink); font-size:2rem; font-weight:600; margin:0;
-  letter-spacing:-.02em;
+  font-family:var(--font-display); color:var(--graphite);
+  font-size:2.6rem; font-weight:400; margin:0; line-height:1.05; letter-spacing:-.03em;
 }
 .top-banner .subtitle{
-  color:var(--lilac); font-size:.8rem; margin:10px 0 0; letter-spacing:.28em;
+  color:var(--slate); font-size:.72rem; margin:12px 0 0; letter-spacing:.34em;
   text-transform:uppercase; font-weight:500;
 }
 .top-banner .tag{
-  display:inline-block; margin-top:14px; padding:5px 14px; font-size:.72rem;
-  color:var(--cyan); border:1px solid rgba(0,177,255,.4); border-radius:9999px;
-  background:rgba(0,177,255,.08); letter-spacing:.04em;
+  display:inline-block; margin-top:14px; font-size:.8rem; color:var(--brass);
+  font-weight:500; letter-spacing:.02em;
+  border-bottom:1px solid var(--ember); padding-bottom:2px;
 }
 
-/* 指标卡片：iris-surface 面 + 顶部 cyan 细条，扁平层次（无发光） */
+/* 分区小标题：编辑式细体 + Ember 短竖条点睛 */
+[data-testid="stMain"] h2, [data-testid="stMain"] h3{
+  font-family:var(--font-display); color:var(--graphite);
+  font-weight:400; letter-spacing:-.02em; position:relative;
+  padding-left:16px; margin-top:.4em;
+}
+[data-testid="stMain"] h2::before, [data-testid="stMain"] h3::before{
+  content:""; position:absolute; left:0; top:.18em; bottom:.18em; width:4px;
+  background:var(--ember);
+}
+[data-testid="stMain"] h3{ font-size:1.35rem; }
+
+/* 指标卡片：白面 + Mist 细边 + Ember 左条，无阴影，不对称圆角 */
 [data-testid="stMetric"],[data-testid="metric-container"]{
-  position:relative; overflow:hidden;
-  background:var(--iris-surface);
-  border:1px solid var(--iris-border);
-  border-radius:20px; padding:18px 22px;
-  transition:background .2s, transform .2s;
+  background:var(--canvas); border:1px solid var(--mist);
+  border-left:3px solid var(--ember);
+  border-radius:6px 0 0 0; padding:18px 22px;
 }
-[data-testid="stMetric"]::before{
-  content:""; position:absolute; left:0; top:0; right:0; height:3px;
-  background:linear-gradient(90deg,var(--cyan),var(--mint));
-}
-[data-testid="stMetric"]:hover{ background:var(--iris-glow); transform:translateY(-2px); }
 [data-testid="stMetric"] label,[data-testid="metric-container"] label{
-  color:var(--ink-soft) !important; font-size:.8rem !important; letter-spacing:.02em;
+  color:var(--slate) !important; font-size:.8rem !important; letter-spacing:.01em;
 }
-[data-testid="stMetricValue"]{ color:var(--ink) !important; font-weight:600; letter-spacing:-.01em; }
-
-/* 标题 */
-h2,h3{ color:var(--ink); font-weight:600; letter-spacing:-.01em; }
+[data-testid="stMetricValue"]{
+  color:var(--graphite) !important; font-family:var(--font-display);
+  font-weight:400; letter-spacing:-.02em;
+}
 
 /* 分割线 */
-hr{ border-color:rgba(72,70,198,.45); }
+hr{ border-color:var(--mist); }
 
-/* 信息条：iris-surface + cyan 左条 */
+/* 信息条：Ivory 纸感底 + Brass 左条，不对称圆角 */
 [data-testid="stAlert"]{
-  background:var(--iris-surface) !important;
-  border:1px solid var(--iris-border) !important;
-  border-left:3px solid var(--cyan) !important; border-radius:16px;
+  background:var(--ivory) !important; border:none !important;
+  border-left:3px solid var(--brass) !important; border-radius:6px 0 0 0; color:var(--graphite);
 }
 
-/* dataframe */
+/* 表格：Ash 细边 + 小圆角 */
 [data-testid="stDataFrame"]{
-  border-radius:16px; overflow:hidden; border:1px solid var(--iris-border);
+  border-radius:8px; overflow:hidden; border:1px solid var(--mist); max-width:100%; overflow-x:auto;
 }
+[data-testid="stMain"] .stCaption, [data-testid="stCaptionContainer"]{ color:var(--slate); }
 
-/* 胶囊标签（多选筛选项） */
+/* 多选筛选标签：Ash 胶囊、墨字 */
 [data-baseweb="tag"]{
-  background:var(--iris-pulse) !important; border-radius:9999px !important; border:none !important;
+  background:var(--ash) !important; color:var(--graphite) !important;
+  border-radius:20px !important; border:1px solid var(--mist) !important;
 }
+[data-baseweb="tag"] span{ color:var(--graphite) !important; }
 
-/* 页脚：iris-surface 卡 + 顶部 cyan→mint 细条 */
+/* 页脚：Ash 纸带 + 顶部 Ember 细线 */
 .footer{
-  position:relative; overflow:hidden;
-  background:var(--iris-surface); border:1px solid var(--iris-border);
-  border-radius:24px; padding:24px 32px; margin-top:48px;
-  color:var(--ink-soft); font-size:.85rem;
+  position:relative; background:var(--ash); border-radius:8px;
+  padding:24px 32px; margin-top:56px; color:var(--steel); font-size:.85rem;
   display:flex; justify-content:space-between; align-items:center; gap:20px;
 }
 .footer::before{
-  content:""; position:absolute; left:0; right:0; top:0; height:3px;
-  background:linear-gradient(90deg,var(--cyan),var(--mint),transparent);
+  content:""; position:absolute; left:0; right:0; top:0; height:3px; background:var(--ember);
+  border-radius:8px 8px 0 0;
 }
-.footer a{ color:var(--cyan); text-decoration:none; }
+.footer a{ color:var(--ember); text-decoration:none; border-bottom:1px solid var(--ember); }
 
-/* 品牌 LOGO 区 */
-.brand{ text-align:center; padding:16px 0 8px; }
-.brand .logo{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:54px; height:54px; border-radius:18px; margin-bottom:10px;
-  background:var(--iris-glow); border:1px solid var(--iris-border); font-size:1.6rem;
-}
+/* 品牌字标（侧边栏） */
+.brand{ padding:14px 2px 8px; }
 .brand .name{
-  font-weight:600; font-size:1.05rem; color:var(--ink); letter-spacing:.14em;
+  font-family:var(--font-display); font-weight:400; font-size:1.15rem;
+  color:var(--graphite); letter-spacing:.02em;
 }
-.brand .name b{ color:var(--cyan); font-weight:600; }
+.brand .name b{ color:var(--ember); font-weight:400; }
+.brand .sub{ color:var(--slate); font-size:.62rem; letter-spacing:.22em; text-transform:uppercase; margin-top:2px; }
 
 /* ===== 移动端适配 ===== */
 @media (max-width: 640px){
-  .block-container{ padding-left:.8rem !important; padding-right:.8rem !important; padding-top:2.6rem !important; }
-  .top-banner{ padding:20px 18px 18px; border-radius:18px; }
-  .top-banner h1{ font-size:1.3rem; line-height:1.25; }
-  .top-banner .subtitle{ font-size:.66rem; letter-spacing:.18em; }
-  /* 两列并排在窄屏堆叠为单列 */
+  .block-container{ padding-left:.8rem !important; padding-right:.8rem !important; padding-top:2.4rem !important; }
+  .top-banner h1{ font-size:1.7rem; }
+  .top-banner .subtitle{ font-size:.62rem; letter-spacing:.2em; }
   [data-testid="stHorizontalBlock"]{ flex-wrap:wrap !important; gap:.6rem !important; }
   [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]{ min-width:100% !important; flex:1 1 100% !important; }
-  [data-testid="stMetricValue"]{ font-size:1.35rem !important; }
-  /* 页脚竖排 */
+  [data-testid="stMetricValue"]{ font-size:1.4rem !important; }
   .footer{ flex-direction:column; align-items:flex-start; gap:14px; padding:20px 18px; }
   .footer > div:last-child{ text-align:left !important; }
 }
-/* 表格在任意屏宽都可横向滚动，避免撑破页面 */
-[data-testid="stDataFrame"]{ max-width:100%; overflow-x:auto; }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= 顶部标题栏 =================
+# ================= 顶部页头 =================
 st.markdown("""
 <div class="top-banner">
-  <h1>📊 卫浴与泛家居进出口多维洞察大屏</h1>
+  <h1>卫浴与泛家居进出口洞察</h1>
   <div class="subtitle">Sanitaryware &amp; Home Export Intelligence</div>
-  <div class="tag">◆ 数据来源：海关出口月度统计</div>
+  <div class="tag">中国海关数据</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -181,8 +176,8 @@ st.markdown("""
 with st.sidebar:
     st.markdown("""
     <div class="brand">
-      <div class="logo">📊</div>
       <div class="name">SANITARY<b>WARE</b></div>
+      <div class="sub">Export Observatory</div>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
@@ -207,14 +202,13 @@ def render_about():
     with st.sidebar:
         st.markdown("---")
         st.markdown("""
-        <div style="padding:16px 16px;border:1px solid #4846c6;border-radius:20px;
-                    background:#232269;">
-          <div style="font-size:.72rem;color:#00b1ff;letter-spacing:.2em;margin-bottom:10px;">◆ ABOUT</div>
-          <div style="color:#eef0fb;font-size:.9rem;font-weight:600;">👤 作者 · sze</div>
-          <div style="color:#b7b9d8;font-size:.84rem;margin-top:6px;">
-            📱 交流 · <a href="tel:13760765317" style="color:#00b1ff;text-decoration:none;">137-6076-5317</a>
+        <div style="padding:16px 16px;border:1px solid #e8e8e8;border-radius:6px 0 0 0;background:#ffffff;">
+          <div style="font-size:.68rem;color:#816729;letter-spacing:.2em;margin-bottom:10px;font-weight:600;">ABOUT</div>
+          <div style="color:#202020;font-size:.9rem;font-weight:600;">作者 · sze</div>
+          <div style="color:#4d4d4d;font-size:.84rem;margin-top:6px;">
+            交流 · <a href="tel:13760765317" style="color:#ff682c;text-decoration:none;border-bottom:1px solid #ff682c;">137-6076-5317</a>
           </div>
-          <div style="color:#9494a9;font-size:.72rem;margin-top:12px;line-height:1.5;">
+          <div style="color:#828282;font-size:.72rem;margin-top:12px;line-height:1.5;">
             数据仅供研究参考<br>不构成商业建议
           </div>
         </div>
@@ -430,15 +424,15 @@ if not month_df.empty:
                 ly.loc[ly.index[0], "环比%"] = np.nan  # 无上年12月则1月环比留空
             fig = px.bar(ly, x="月标签", y="金额_亿", text_auto=".2f",
                          title=f"{latest} 年各月出口额（亿美元）")
-            fig.update_traces(marker_color="#00b1ff")
+            fig.update_traces(marker_color="#4d4d4d")
             fig.update_yaxes(title_text="金额（亿美元）"); fig.update_xaxes(title_text="")
             # 环比% 折线（次轴）
             fig.add_scatter(x=ly["月标签"], y=ly["环比%"], name="环比%", yaxis="y2",
-                            mode="lines+markers+text", line=dict(color="#00ffaa"),
+                            mode="lines+markers+text", line=dict(color="#ff682c"),
                             text=[f"{v:+.1f}%" if pd.notna(v) else "" for v in ly["环比%"]],
-                            textposition="top center", textfont=dict(color="#00ffaa"))
+                            textposition="top center", textfont=dict(color="#ff682c"))
             fig.update_layout(yaxis2=dict(title="环比%", overlaying="y", side="right",
-                                          showgrid=False, zeroline=True, zerolinecolor="rgba(255,107,138,.5)"),
+                                          showgrid=False, zeroline=True, zerolinecolor="#e8e8e8"),
                               legend=dict(orientation="h", y=1.12))
             st.plotly_chart(fig, use_container_width=True)
             tshow = ly[["月标签", "金额_美元", "上月", "环比%"]].copy()
@@ -501,6 +495,23 @@ if not month_df.empty:
                                 ["金额_美元", "上年同期"]),
                      use_container_width=True, hide_index=True)
 
+    # 出口结构树图（区域 › 国家）
+    st.subheader(f"🧱 {latest} 年{plabel} 出口结构树图（区域 › 国家）")
+    st.caption("面积代表出口额，按区域分组下钻到主要目的地；点击区块可展开/收起。")
+    tm = sp[sp["统计年份"] == latest].groupby(["所属区域", "贸易伙伴名称"], as_index=False)["金额_美元"].sum()
+    tm = tm[tm["金额_美元"] > 0]
+    if not tm.empty:
+        tm["金额_亿"] = (tm["金额_美元"] / 1e8).round(2)
+        fig_tm = px.treemap(tm, path=[px.Constant("全部"), "所属区域", "贸易伙伴名称"],
+                            values="金额_美元", color="所属区域",
+                            color_discrete_sequence=EDIT_SEQ, custom_data=["金额_亿"])
+        fig_tm.update_traces(
+            texttemplate="%{label}  %{percentParent}",
+            hovertemplate="%{label}<br>%{customdata[0]:.2f} 亿美元<extra></extra>",
+            root_color="#efefef", marker_line_color="#ffffff", marker_line_width=1)
+        fig_tm.update_layout(margin=dict(t=10, l=0, r=0, b=0), height=460)
+        st.plotly_chart(fig_tm, use_container_width=True)
+
     # ===== 新增分析维度 =====
     if prev_ok:
         st.markdown("---")
@@ -528,7 +539,7 @@ if not month_df.empty:
         contrib = contrib.sort_values("贡献额")
         contrib["贡献_亿"] = contrib["贡献额"] / 1e8
         fig_c = px.bar(contrib, x="贡献_亿", y="所属区域", orientation="h",
-                       color="方向", color_discrete_map={"拉动":"#00ffaa","拖累":"#ff6b8a"},
+                       color="方向", color_discrete_map={"拉动":"#816729","拖累":"#ff682c"},
                        text=contrib["贡献额"].apply(lambda v: f"{'+'if v>=0 else ''}{v/1e8:.2f}亿"),
                        title=f"{prev_year}→{latest} 各区域对总出口变化的贡献（亿美元）")
         fig_c.update_traces(textposition="outside")
@@ -552,7 +563,7 @@ if not month_df.empty:
         share["方向"] = share["份额变化ppt"].apply(lambda x: "提升" if x >= 0 else "下降")
         share = share.sort_values("份额变化ppt")
         fig_s = px.bar(share, x="份额变化ppt", y="所属区域", orientation="h",
-                       color="方向", color_discrete_map={"提升":"#00b1ff","下降":"#ff9e6b"},
+                       color="方向", color_discrete_map={"提升":"#816729","下降":"#ff682c"},
                        text=share["份额变化ppt"].apply(lambda v: f"{'+'if v>=0 else ''}{v:.1f}ppt"),
                        title=f"各区域出口份额变化（百分点）")
         fig_s.update_traces(textposition="outside")
@@ -684,13 +695,13 @@ render_about()
 st.markdown("""
 <div class="footer">
   <div>
-    <span style="font-size:1rem;font-weight:600;color:#eef0fb;">📊 卫浴与泛家居进出口多维洞察大屏</span><br>
+    <span style="font-size:1rem;font-weight:600;color:#202020;">卫浴与泛家居进出口洞察</span><br>
     <span style="font-size:.78rem;">同比口径：各年取相同月份汇总后逐年同比。</span>
   </div>
   <div style="text-align:right;line-height:1.8;">
-    <span style="color:#00b1ff;font-weight:600;">作者 · sze</span><br>
-    <span>📱 交流 · <a href="tel:13760765317">137-6076-5317</a></span><br>
-    <span style="font-size:.75rem;color:#9494a9;">数据来源：海关出口统计 · 仅供研究参考</span>
+    <span style="color:#202020;font-weight:600;">作者 · sze</span><br>
+    <span>交流 · <a href="tel:13760765317">137-6076-5317</a></span><br>
+    <span style="font-size:.75rem;color:#828282;">数据来源：中国海关数据 · 仅供研究参考</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
