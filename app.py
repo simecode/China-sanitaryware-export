@@ -33,89 +33,66 @@ DATASETS = {
     "水龙头/龙头": "data/default_faucet.parquet",
 }
 
-st.set_page_config(page_title="卫浴行业数据观察智库", layout="wide", page_icon="📊")
+st.set_page_config(page_title="卫浴与泛家居进出口洞察", layout="wide")
 
 # ================= 全局样式（Ventriloc 编辑风 · 暖白纸底 + 橙色点睛）=================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 :root{
   --graphite:#202020; --canvas:#ffffff; --ash:#efefef; --fog:#f5f5f5;
   --ivory:#ebe6dd; --steel:#4d4d4d; --slate:#828282; --mist:#e8e8e8;
   --ember:#ff682c; --brass:#816729;
-  --font-display:'Space Grotesk', 'Inter', system-ui, sans-serif;
-  --font-body:'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font:'Inter', "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, -apple-system, sans-serif;
 }
 
-html, body, [data-testid="stAppViewContainer"] * { font-family:var(--font-body); }
+html, body, [data-testid="stAppViewContainer"] *, [data-testid="stSidebar"] * { font-family:var(--font); }
 
-/* 主背景：纯白画布 */
+/* 主背景：纯白画布，充足留白 */
 [data-testid="stAppViewContainer"]{ background:var(--canvas); }
-.block-container{ padding-top:2.4rem; max-width:1280px; }
+.block-container{ padding-top:3rem; max-width:1240px; }
+[data-testid="stMain"] [data-testid="stVerticalBlock"]{ gap:1.1rem; }
 
-/* 侧边栏：Ash 暖灰面，右侧细描边 */
+/* 侧边栏：Ash 暖灰面 */
 [data-testid="stSidebar"]{ background:var(--ash); border-right:1px solid var(--mist); }
 [data-testid="stSidebar"] .stMarkdown hr{ border-color:var(--mist); }
 [data-testid="stSidebar"] h2,[data-testid="stSidebar"] h3{
-  color:var(--graphite) !important; font-family:var(--font-display);
-  font-size:.9rem !important; font-weight:500; letter-spacing:-.01em;
+  color:var(--slate) !important; font-size:.72rem !important; font-weight:600;
+  letter-spacing:.14em; text-transform:uppercase;
 }
 
-/* 顶部页头：编辑式，无填充盒，白底 + 细体大标题 + 底部墨线 */
-.top-banner{
-  padding:6px 2px 22px; margin-bottom:8px;
-  border-bottom:1px solid var(--graphite);
-}
+/* 顶部页头：极简大字，充足留白，细体墨黑 */
+.top-banner{ padding:8px 0 30px; margin-bottom:10px; }
 .top-banner h1{
-  font-family:var(--font-display); color:var(--graphite);
-  font-size:2.6rem; font-weight:400; margin:0; line-height:1.05; letter-spacing:-.03em;
+  color:var(--graphite); font-size:3rem; font-weight:300; margin:0;
+  line-height:1.06; letter-spacing:-.03em;
 }
 .top-banner .subtitle{
-  color:var(--slate); font-size:.72rem; margin:12px 0 0; letter-spacing:.34em;
+  color:var(--slate); font-size:.72rem; margin:16px 0 0; letter-spacing:.34em;
   text-transform:uppercase; font-weight:500;
 }
-.top-banner .tag{
-  display:inline-block; margin-top:14px; font-size:.8rem; color:var(--brass);
-  font-weight:500; letter-spacing:.02em;
-  border-bottom:1px solid var(--ember); padding-bottom:2px;
-}
 
-/* 分区小标题：编辑式细体 + Ember 短竖条点睛 */
+/* 分区小标题：干净细体，无符号无竖条，充足上间距 */
 [data-testid="stMain"] h2, [data-testid="stMain"] h3{
-  font-family:var(--font-display); color:var(--graphite);
-  font-weight:400; letter-spacing:-.02em; position:relative;
-  padding-left:16px; margin-top:.4em;
+  color:var(--graphite); font-weight:400; letter-spacing:-.02em; margin-top:1.4em;
 }
-[data-testid="stMain"] h2::before, [data-testid="stMain"] h3::before{
-  content:""; position:absolute; left:0; top:.18em; bottom:.18em; width:4px;
-  background:var(--ember);
-}
-[data-testid="stMain"] h3{ font-size:1.35rem; }
+[data-testid="stMain"] h3{ font-size:1.45rem; }
 
-/* 指标卡片：白面 + Mist 细边 + Ember 左条，无阴影，不对称圆角 */
+/* 指标卡片：干净白面 + Mist 细边，去彩色边，8px 圆角，无阴影 */
 [data-testid="stMetric"],[data-testid="metric-container"]{
   background:var(--canvas); border:1px solid var(--mist);
-  border-left:3px solid var(--ember);
-  border-radius:6px 0 0 0; padding:18px 22px;
+  border-radius:8px; padding:22px 24px;
 }
 [data-testid="stMetric"] label,[data-testid="metric-container"] label{
-  color:var(--slate) !important; font-size:.8rem !important; letter-spacing:.01em;
+  color:var(--slate) !important; font-size:.78rem !important; letter-spacing:.01em;
 }
 [data-testid="stMetricValue"]{
-  color:var(--graphite) !important; font-family:var(--font-display);
-  font-weight:400; letter-spacing:-.02em;
+  color:var(--graphite) !important; font-weight:300; letter-spacing:-.02em; font-size:2rem;
 }
 
-/* 分割线 */
 hr{ border-color:var(--mist); }
 
-/* 信息条：Ivory 纸感底 + Brass 左条，不对称圆角 */
-[data-testid="stAlert"]{
-  background:var(--ivory) !important; border:none !important;
-  border-left:3px solid var(--brass) !important; border-radius:6px 0 0 0; color:var(--graphite);
-}
-
-/* 表格：Ash 细边 + 小圆角 */
+/* 表格 */
 [data-testid="stDataFrame"]{
   border-radius:8px; overflow:hidden; border:1px solid var(--mist); max-width:100%; overflow-x:auto;
 }
@@ -123,7 +100,7 @@ hr{ border-color:var(--mist); }
 
 /* 多选筛选标签：Ash 胶囊、墨字 */
 [data-baseweb="tag"]{
-  background:var(--ash) !important; color:var(--graphite) !important;
+  background:var(--canvas) !important; color:var(--graphite) !important;
   border-radius:20px !important; border:1px solid var(--mist) !important;
 }
 [data-baseweb="tag"] span{ color:var(--graphite) !important; }
@@ -131,7 +108,7 @@ hr{ border-color:var(--mist); }
 /* 页脚：Ash 纸带 + 顶部 Ember 细线 */
 .footer{
   position:relative; background:var(--ash); border-radius:8px;
-  padding:24px 32px; margin-top:56px; color:var(--steel); font-size:.85rem;
+  padding:24px 32px; margin-top:64px; color:var(--steel); font-size:.85rem;
   display:flex; justify-content:space-between; align-items:center; gap:20px;
 }
 .footer::before{
@@ -142,21 +119,18 @@ hr{ border-color:var(--mist); }
 
 /* 品牌字标（侧边栏） */
 .brand{ padding:14px 2px 8px; }
-.brand .name{
-  font-family:var(--font-display); font-weight:400; font-size:1.15rem;
-  color:var(--graphite); letter-spacing:.02em;
-}
-.brand .name b{ color:var(--ember); font-weight:400; }
-.brand .sub{ color:var(--slate); font-size:.62rem; letter-spacing:.22em; text-transform:uppercase; margin-top:2px; }
+.brand .name{ font-weight:500; font-size:1.15rem; color:var(--graphite); letter-spacing:.06em; }
+.brand .name b{ color:var(--ember); font-weight:500; }
+.brand .sub{ color:var(--slate); font-size:.62rem; letter-spacing:.22em; text-transform:uppercase; margin-top:3px; }
 
 /* ===== 移动端适配 ===== */
 @media (max-width: 640px){
   .block-container{ padding-left:.8rem !important; padding-right:.8rem !important; padding-top:2.4rem !important; }
-  .top-banner h1{ font-size:1.7rem; }
+  .top-banner h1{ font-size:1.9rem; }
   .top-banner .subtitle{ font-size:.62rem; letter-spacing:.2em; }
   [data-testid="stHorizontalBlock"]{ flex-wrap:wrap !important; gap:.6rem !important; }
   [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]{ min-width:100% !important; flex:1 1 100% !important; }
-  [data-testid="stMetricValue"]{ font-size:1.4rem !important; }
+  [data-testid="stMetricValue"]{ font-size:1.5rem !important; }
   .footer{ flex-direction:column; align-items:flex-start; gap:14px; padding:20px 18px; }
   .footer > div:last-child{ text-align:left !important; }
 }
@@ -167,8 +141,7 @@ hr{ border-color:var(--mist); }
 st.markdown("""
 <div class="top-banner">
   <h1>卫浴与泛家居进出口洞察</h1>
-  <div class="subtitle">Sanitaryware &amp; Home Export Intelligence</div>
-  <div class="tag">中国海关数据</div>
+  <div class="subtitle">Sanitaryware &amp; Home Export Intelligence · 中国海关数据</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -181,18 +154,18 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
-    st.header("⚙️ 引擎配置")
+    st.header("引擎配置")
     analysis_mode = st.radio("选择分析维度",
                              ["同口径(前N月)对比", "月度动态演变", "月度环比走势", "历年全年(完整年份)"])
 
     st.markdown("---")
-    st.header("🔑 AI 智库接入")
+    st.header("AI 接入")
     openrouter_key = st.text_input("OpenRouter API Key", type="password")
     ai_model = st.selectbox("推理模型", ["openai/gpt-oss-120b:free", "deepseek/deepseek-chat:free"])
 
     st.markdown("---")
-    st.header("📂 数据来源")
-    use_builtin = st.checkbox("📊 使用内置默认数据（无需上传）", value=True)
+    st.header("数据来源")
+    use_builtin = st.checkbox("使用内置默认数据（无需上传）", value=True)
     selected_dataset = (st.selectbox("选择内置数据集", options=list(DATASETS.keys()), index=0)
                         if use_builtin else None)
 
@@ -332,7 +305,7 @@ if not month_df.empty:
     all_years = sorted(int(y) for y in month_df["统计年份"].dropna().unique())
     with st.sidebar:
         st.markdown("---")
-        st.header("📅 年份筛选")
+        st.header("年份筛选")
         selected_years = st.multiselect(
             "参与对比的年份", options=all_years, default=all_years)
     if not selected_years:
@@ -347,7 +320,7 @@ if not month_df.empty:
     # 月份筛选：放侧边栏，影响全页所有指标/图表
     with st.sidebar:
         st.markdown("---")
-        st.header("📅 月份筛选")
+        st.header("月份筛选")
         show_months = st.multiselect(
             "参与对比的月份", options=months, default=months)
     if not show_months:
@@ -362,10 +335,8 @@ if not month_df.empty:
     is_prefix = show_months_sorted == list(range(1, n + 1))
     plabel = f"前{n}月" if is_prefix else mlabel
 
-    banner = f"📐 口径：{selected_dataset} · 最新年份 **{latest}** · 对比月份 **{mlabel}**（各年取相同月份汇总同比）"
     if not prev_ok:
-        banner += f" · ⚠️ 缺 {prev_year} 年月度数据，同比暂无法计算"
-    st.info(banner)
+        st.caption(f"缺 {prev_year} 年月度数据，同比暂无法计算。")
 
     annual_sp = yoy_table(sp, [])
     partner_sp = yoy_table(sp, ["贸易伙伴名称", "所属区域"])
@@ -377,7 +348,7 @@ if not month_df.empty:
     cur_yoy = cur_yoy.iloc[0] if len(cur_yoy) and pd.notna(cur_yoy.iloc[0]) else None
     prev_total = float(annual_sp.loc[annual_sp["统计年份"] == prev_year, "金额_美元"].sum()) if prev_ok else None
 
-    st.markdown(f"### 🌐 {latest} 年{plabel} 全球市场贸易格局透视")
+    st.markdown(f"### {latest} 年{plabel} 全球市场贸易格局透视")
     ca, cb, cc = st.columns(3)
     ca.metric(f"{latest} 年{plabel}出口总额", fmt_money(cur_total),
               delta=(f"{cur_yoy:+.2f}%" if cur_yoy is not None else None))
@@ -387,7 +358,7 @@ if not month_df.empty:
     st.markdown("---")
 
     if analysis_mode == "月度动态演变":
-        st.subheader("📈 月度出口趋势（同口径月份，多年份叠加对比）")
+        st.subheader("月度出口趋势（同口径月份，多年份叠加对比）")
         md = month_df_sel[month_df_sel["月份"].isin(show_months)].copy()
         md = md.groupby(["统计年份", "月份"], as_index=False)["金额_美元"].sum()
         md["年份"] = md["统计年份"].astype(str)
@@ -406,7 +377,7 @@ if not month_df.empty:
             st.plotly_chart(fig, use_container_width=True)
 
     elif analysis_mode == "月度环比走势":
-        st.subheader(f"🔁 {latest} 年月度环比走势（本月对上月）")
+        st.subheader(f"{latest} 年月度环比走势（本月对上月）")
         st.caption("环比 = 本月出口额相对上月的增减；1月环比对上年12月。反映年内实时节奏，不含同比的基数效应。")
         # 构造 latest 年的连续月度序列（含上年12月，用于1月环比）
         ly = (month_df_sel[month_df_sel["统计年份"] == latest]
@@ -446,7 +417,7 @@ if not month_df.empty:
                             f"环比 **{(q2-q1)/q1*100:+.1f}%**")
 
     else:
-        st.subheader(f"📊 历年{plabel}出口额（同口径）")
+        st.subheader(f"历年{plabel}出口额（同口径）")
         if not annual_sp.empty:
             bar = annual_sp.copy()
             bar["年份"] = bar["统计年份"].astype(str)
@@ -462,7 +433,7 @@ if not month_df.empty:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader(f"🏆 {latest} 年{plabel} 前十大出口目的地")
+        st.subheader(f"{latest} 年{plabel} 前十大出口目的地")
         top = partner_sp[partner_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False).head(10)
         if not top.empty:
             topb = add_yi(top)
@@ -473,7 +444,7 @@ if not month_df.empty:
                                ["金额_美元", "上年同期"])
             st.dataframe(tshow, use_container_width=True, hide_index=True)
     with col2:
-        st.subheader(f"🏭 {latest} 年{plabel} 出口省份 TOP10")
+        st.subheader(f"{latest} 年{plabel} 出口省份 TOP10")
         ptop = province_sp[province_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False).head(10)
         if not ptop.empty:
             ptb = add_yi(ptop)
@@ -482,34 +453,37 @@ if not month_df.empty:
             st.plotly_chart(fig2, use_container_width=True)
 
     # 区域
-    st.subheader(f"🗺️ {latest} 年{plabel} 区域分布")
+    st.subheader(f"{latest} 年{plabel} 区域分布")
     rnow = region_sp[region_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False)
     if (rnow["所属区域"] == "其他").all():
         st.warning("区域全部为「其他」：请把『区域映射表.xlsx』放到根目录后重跑 prepare，以启用区域映射。")
     if not rnow.empty:
         rnb = add_yi(rnow)
-        fig3 = px.bar(rnb, x="所属区域", y="金额_亿", color="所属区域", text_auto=".2f")
+        fig3 = px.bar(rnb, x="所属区域", y="金额_亿", text_auto=".2f")
+        fig3.update_traces(marker_color="#4d4d4d")
         fig3.update_yaxes(title_text="金额（亿美元）")
         st.plotly_chart(fig3, use_container_width=True)
         st.dataframe(disp_money(rnow[["所属区域", "金额_美元", "上年同期", "金额同比%"]],
                                 ["金额_美元", "上年同期"]),
                      use_container_width=True, hide_index=True)
 
-    # 出口结构树图（区域 › 国家）
-    st.subheader(f"🧱 {latest} 年{plabel} 出口结构树图（区域 › 国家）")
-    st.caption("面积代表出口额，按区域分组下钻到主要目的地；点击区块可展开/收起。")
+    # 出口结构（区域 › 国家）
+    st.subheader(f"{latest} 年{plabel} 出口结构（区域 › 国家）")
     tm = sp[sp["统计年份"] == latest].groupby(["所属区域", "贸易伙伴名称"], as_index=False)["金额_美元"].sum()
     tm = tm[tm["金额_美元"] > 0]
     if not tm.empty:
         tm["金额_亿"] = (tm["金额_美元"] / 1e8).round(2)
         fig_tm = px.treemap(tm, path=[px.Constant("全部"), "所属区域", "贸易伙伴名称"],
-                            values="金额_美元", color="所属区域",
-                            color_discrete_sequence=EDIT_SEQ, custom_data=["金额_亿"])
+                            values="金额_美元", color="金额_美元",
+                            color_continuous_scale=["#f4efe8", "#e6d3bd", "#cf9b6a", "#ff682c"],
+                            custom_data=["金额_亿"])
         fig_tm.update_traces(
             texttemplate="%{label}  %{percentParent}",
             hovertemplate="%{label}<br>%{customdata[0]:.2f} 亿美元<extra></extra>",
-            root_color="#efefef", marker_line_color="#ffffff", marker_line_width=1)
-        fig_tm.update_layout(margin=dict(t=10, l=0, r=0, b=0), height=460)
+            tiling=dict(pad=2), root_color="#ffffff",
+            marker_line_color="#ffffff", marker_line_width=2, textfont=dict(color="#202020"))
+        fig_tm.update_layout(margin=dict(t=6, l=0, r=0, b=0), height=460,
+                             coloraxis_showscale=False)
         st.plotly_chart(fig_tm, use_container_width=True)
 
     # ===== 新增分析维度 =====
@@ -527,7 +501,7 @@ if not month_df.empty:
                         or (_rp.get(r, 0) / tot_prev_r if tot_prev_r else 0) >= 0.01}
 
         # ── 1. 增长贡献分解 ──────────────────────────────────────────
-        st.subheader(f"📉 增长贡献分解：{prev_year}→{latest} 各区域拉动/拖累")
+        st.subheader(f"增长贡献分解：{prev_year}→{latest} 各区域拉动/拖累")
         st.caption("已剔除份额不足 1% 的小基数区域及「其他」")
         r_cur  = region_sp[region_sp["统计年份"] == latest ][["所属区域","金额_美元"]].rename(columns={"金额_美元":"今年"})
         r_prev = region_sp[region_sp["统计年份"] == prev_year][["所属区域","金额_美元"]].rename(columns={"金额_美元":"去年"})
@@ -554,7 +528,7 @@ if not month_df.empty:
         st.markdown("---")
 
         # ── 2. 市场份额变化 ──────────────────────────────────────────
-        st.subheader(f"🔄 市场份额迁移：{prev_year}→{latest} 各区域占比变化（百分点）")
+        st.subheader(f"市场份额迁移：{prev_year}→{latest} 各区域占比变化（百分点）")
         share_cur  = region_sp[region_sp["统计年份"] == latest ][["所属区域","金额份额%"]].rename(columns={"金额份额%":"今年份额%"})
         share_prev = region_sp[region_sp["统计年份"] == prev_year][["所属区域","金额份额%"]].rename(columns={"金额份额%":"去年份额%"})
         share = share_cur.merge(share_prev, on="所属区域", how="outer").fillna(0)
@@ -576,7 +550,7 @@ if not month_df.empty:
         # 基数门槛：今年、去年出口额均需达到当期总额的约0.3%（下限100万美元），
         # 只保留有真实体量的市场，剔除小基数市场。
         base_floor = max(1e6, 0.003 * cur_total)
-        st.subheader(f"🌱 高增长 & 深回调市场（{prev_year}→{latest}，国家粒度）")
+        st.subheader(f"高增长 & 深回调市场（{prev_year}→{latest}，国家粒度）")
         st.caption(f"仅统计两年出口额均 ≥ ${base_floor/1e6:.1f}M 的市场（剔除小基数市场）")
 
         p_cur  = partner_sp[partner_sp["统计年份"] == latest ][["贸易伙伴名称","所属区域","金额_美元","金额同比%"]].rename(columns={"金额_美元":"今年"})
@@ -589,7 +563,7 @@ if not month_df.empty:
 
         c3a, c3b = st.columns(2)
         with c3a:
-            st.markdown("**🚀 增速领先 TOP10（同比%）**")
+            st.markdown("**增速领先 TOP10（同比%）**")
             if not risers.empty:
                 fig_r = px.bar(risers.sort_values("金额同比%"), x="金额同比%", y="贸易伙伴名称",
                                orientation="h", color="所属区域", text_auto=".1f",
@@ -600,7 +574,7 @@ if not month_df.empty:
                 rt.columns = ["贸易伙伴名称","所属区域","今年出口额（亿美元）","去年出口额（亿美元）","同比%"]
                 st.dataframe(rt, use_container_width=True, hide_index=True)
         with c3b:
-            st.markdown("**📉 跌幅最深 TOP10（同比%）**")
+            st.markdown("**跌幅最深 TOP10（同比%）**")
             if not fallers.empty:
                 fig_f = px.bar(fallers.sort_values("金额同比%", ascending=False), x="金额同比%", y="贸易伙伴名称",
                                orientation="h", color="所属区域", text_auto=".1f",
@@ -617,7 +591,7 @@ if not month_df.empty:
     # 没有月度数据来源的年份再用年度（全年快照）文件补充；不满12个月的年份一律排除。
     if analysis_mode == "历年全年(完整年份)":
         st.markdown("---")
-        st.subheader("🗓️ 历年全年出口额（仅完整年份）")
+        st.subheader("历年全年出口额（仅完整年份）")
 
         month_counts = month_df_sel.groupby("统计年份")["月份"].nunique()
         full_years_from_month = sorted(int(y) for y in month_counts[month_counts >= 12].index)
@@ -657,14 +631,14 @@ else:
     latest = years[-1] if years else None
     if latest is not None:
         snap = year_df[year_df["统计年份"] == latest]
-        st.markdown(f"### 🌐 {latest} 年市场快照")
+        st.markdown(f"### {latest} 年市场快照")
         ca, cb = st.columns(2)
         ca.metric(f"{latest} 年出口总额", fmt_money(snap['金额_美元'].sum()))
         cb.metric("活跃目的地数量", int(snap["贸易伙伴名称"].nunique()))
         st.markdown("---")
         c1, c2 = st.columns(2)
         with c1:
-            st.subheader("🏆 前十大出口目的地")
+            st.subheader("前十大出口目的地")
             t = snap.groupby(["贸易伙伴名称", "所属区域"], as_index=False)["金额_美元"].sum() \
                     .sort_values("金额_美元", ascending=False).head(10)
             t = add_yi(t)
@@ -672,7 +646,7 @@ else:
             fig_t.update_yaxes(title_text="金额（亿美元）")
             st.plotly_chart(fig_t, use_container_width=True)
         with c2:
-            st.subheader("🏭 出口省份 TOP10")
+            st.subheader("出口省份 TOP10")
             p = snap.groupby("注册地名称", as_index=False)["金额_美元"].sum() \
                     .sort_values("金额_美元", ascending=False).head(10)
             p = add_yi(p)
@@ -681,7 +655,7 @@ else:
             st.plotly_chart(fig_p, use_container_width=True)
         # 单价（若有重量）
         if (snap["数量_统一"] > 0).any():
-            st.subheader("💰 高附加值市场 TOP10（按出口单价）")
+            st.subheader("高附加值市场 TOP10（按出口单价）")
             u = snap.groupby(["贸易伙伴名称", "所属区域"], as_index=False).agg(
                 {"金额_美元": "sum", "数量_统一": "sum"})
             u["出口单价（美元/单位）"] = np.where(u["数量_统一"] > 0,
