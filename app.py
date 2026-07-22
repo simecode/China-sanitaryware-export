@@ -325,10 +325,9 @@ if not month_df.empty:
     is_prefix = show_months_sorted == list(range(1, n + 1))
     plabel = f"前{n}月" if is_prefix else mlabel
 
-    banner = (f"📐 **同口径口径**：{selected_dataset} 当前筛选下最新年份 **{latest}**，"
-              f"展示月份 **{mlabel}**。所有同比均按【各年相同月份】计算，绝不拿部分月份比往年全年。")
+    banner = f"📐 口径：{selected_dataset} · 最新年份 **{latest}** · 对比月份 **{mlabel}**（各年取相同月份汇总同比）"
     if not prev_ok:
-        banner += (f" ⚠️ 缺少 **{prev_year} 年的月度数据**，{latest} 年同比暂时无法计算。")
+        banner += f" · ⚠️ 缺 {prev_year} 年月度数据，同比暂无法计算"
     st.info(banner)
 
     annual_sp = yoy_table(sp, [])
@@ -410,11 +409,23 @@ if not month_df.empty:
     if prev_ok:
         st.markdown("---")
 
+        # 剔除小微区域：仅保留今年或去年份额≥1%的区域，且排除「其他」，避免小基数噪音
+        tot_cur_r  = region_sp.loc[region_sp["统计年份"] == latest,    "金额_美元"].sum()
+        tot_prev_r = region_sp.loc[region_sp["统计年份"] == prev_year, "金额_美元"].sum()
+        _rc = region_sp[region_sp["统计年份"] == latest ].set_index("所属区域")["金额_美元"]
+        _rp = region_sp[region_sp["统计年份"] == prev_year].set_index("所属区域")["金额_美元"]
+        _regs = set(_rc.index) | set(_rp.index)
+        keep_regions = {r for r in _regs if r != "其他" and
+                        (_rc.get(r, 0) / tot_cur_r if tot_cur_r else 0) >= 0.01
+                        or (_rp.get(r, 0) / tot_prev_r if tot_prev_r else 0) >= 0.01}
+
         # ── 1. 增长贡献分解 ──────────────────────────────────────────
         st.subheader(f"📉 增长贡献分解：{prev_year}→{latest} 各区域拉动/拖累")
+        st.caption("已剔除份额不足 1% 的小微区域及未归类「其他」")
         r_cur  = region_sp[region_sp["统计年份"] == latest ][["所属区域","金额_美元"]].rename(columns={"金额_美元":"今年"})
         r_prev = region_sp[region_sp["统计年份"] == prev_year][["所属区域","金额_美元"]].rename(columns={"金额_美元":"去年"})
         contrib = r_cur.merge(r_prev, on="所属区域", how="outer").fillna(0)
+        contrib = contrib[contrib["所属区域"].isin(keep_regions)]
         contrib["贡献额"] = contrib["今年"] - contrib["去年"]
         contrib["方向"]   = contrib["贡献额"].apply(lambda x: "拉动" if x >= 0 else "拖累")
         contrib["贡献率%"] = (contrib["贡献额"] / abs(contrib["贡献额"]).sum() * 100).round(1)
@@ -437,6 +448,7 @@ if not month_df.empty:
         share_cur  = region_sp[region_sp["统计年份"] == latest ][["所属区域","金额份额%"]].rename(columns={"金额份额%":"今年份额%"})
         share_prev = region_sp[region_sp["统计年份"] == prev_year][["所属区域","金额份额%"]].rename(columns={"金额份额%":"去年份额%"})
         share = share_cur.merge(share_prev, on="所属区域", how="outer").fillna(0)
+        share = share[share["所属区域"].isin(keep_regions)]
         share["份额变化ppt"] = (share["今年份额%"] - share["去年份额%"]).round(2)
         share["方向"] = share["份额变化ppt"].apply(lambda x: "提升" if x >= 0 else "下降")
         share = share.sort_values("份额变化ppt")
@@ -450,53 +462,45 @@ if not month_df.empty:
 
         st.markdown("---")
 
-        # ── 3. 新兴市场 vs 萎缩市场（国家粒度） ────────────────────
-        st.subheader(f"🌱 新兴市场 & 萎缩市场（{prev_year}→{latest}，国家粒度）")
-        p_cur  = partner_sp[partner_sp["统计年份"] == latest ][["贸易伙伴名称","所属区域","金额_美元","金额同比%"]]
-        p_prev = partner_sp[partner_sp["统计年份"] == prev_year][["贸易伙伴名称","金额_美元"]].rename(columns={"金额_美元":"去年金额"})
-        p_join = p_cur.merge(p_prev, on="贸易伙伴名称", how="left")
+        # ── 3. 新兴市场 vs 萎缩市场（国家粒度，仅统计有真实体量的市场） ────
+        # 基数门槛：今年、去年出口额均需达到当期总额的约0.3%（下限100万美元），
+        # 剔除 0→1 或小微市场造成的"虚高增速/暴跌"噪音。
+        base_floor = max(1e6, 0.003 * cur_total)
+        st.subheader(f"🌱 高增长 & 深回调市场（{prev_year}→{latest}，国家粒度）")
+        st.caption(f"仅统计两年出口额均 ≥ ${base_floor/1e6:.1f}M 的市场，剔除小微/新进出市场的增速噪音")
 
-        new_markets = p_cur[~p_cur["贸易伙伴名称"].isin(p_prev["贸易伙伴名称"])].sort_values("金额_美元", ascending=False).head(10)
-        lost_markets_prev = partner_sp[partner_sp["统计年份"] == prev_year][["贸易伙伴名称","金额_美元"]]
-        lost_markets = lost_markets_prev[~lost_markets_prev["贸易伙伴名称"].isin(
-            partner_sp[partner_sp["统计年份"] == latest]["贸易伙伴名称"])].sort_values("金额_美元", ascending=False).head(10)
+        p_cur  = partner_sp[partner_sp["统计年份"] == latest ][["贸易伙伴名称","所属区域","金额_美元","金额同比%"]].rename(columns={"金额_美元":"今年"})
+        p_prev = partner_sp[partner_sp["统计年份"] == prev_year][["贸易伙伴名称","金额_美元"]].rename(columns={"金额_美元":"去年"})
+        p_join = p_cur.merge(p_prev, on="贸易伙伴名称", how="left").fillna({"去年": 0})
+        cand = p_join[(p_join["今年"] >= base_floor) & (p_join["去年"] >= base_floor)].dropna(subset=["金额同比%"]).copy()
 
-        with_both = p_join.dropna(subset=["金额同比%"]).copy()
-        risers  = with_both.sort_values("金额同比%", ascending=False).head(10)
-        fallers = with_both.sort_values("金额同比%", ascending=True ).head(10)
+        risers  = cand.sort_values("金额同比%", ascending=False).head(10)
+        fallers = cand.sort_values("金额同比%", ascending=True ).head(10)
 
         c3a, c3b = st.columns(2)
         with c3a:
-            st.markdown(f"**🚀 增速最快 TOP10（同比增长%）**")
+            st.markdown("**🚀 增速领先 TOP10（同比%）**")
             if not risers.empty:
                 fig_r = px.bar(risers.sort_values("金额同比%"), x="金额同比%", y="贸易伙伴名称",
-                               orientation="h", color="所属区域", text_auto=".1f")
+                               orientation="h", color="所属区域", text_auto=".1f",
+                               hover_data={"今年":":,.0f","去年":":,.0f"})
                 fig_r.update_layout(xaxis_title="同比增长%", yaxis_title="")
                 st.plotly_chart(fig_r, use_container_width=True)
+                st.dataframe(risers[["贸易伙伴名称","所属区域","今年","去年","金额同比%"]].rename(
+                    columns={"今年":"今年出口额","去年":"去年出口额","金额同比%":"同比%"}),
+                    use_container_width=True, hide_index=True)
         with c3b:
-            st.markdown(f"**📉 跌幅最大 TOP10（同比下滑%）**")
+            st.markdown("**📉 跌幅最深 TOP10（同比%）**")
             if not fallers.empty:
                 fig_f = px.bar(fallers.sort_values("金额同比%", ascending=False), x="金额同比%", y="贸易伙伴名称",
                                orientation="h", color="所属区域", text_auto=".1f",
-                               color_discrete_sequence=px.colors.qualitative.Set2)
+                               color_discrete_sequence=px.colors.qualitative.Set2,
+                               hover_data={"今年":":,.0f","去年":":,.0f"})
                 fig_f.update_layout(xaxis_title="同比增长%", yaxis_title="")
                 st.plotly_chart(fig_f, use_container_width=True)
-
-        c3c, c3d = st.columns(2)
-        with c3c:
-            st.markdown(f"**🌱 新进入市场（{latest}年新增，{prev_year}年无记录）**")
-            if not new_markets.empty:
-                st.dataframe(new_markets[["贸易伙伴名称","所属区域","金额_美元"]].rename(
-                    columns={"金额_美元":"出口额"}), use_container_width=True, hide_index=True)
-            else:
-                st.caption("无新进入市场")
-        with c3d:
-            st.markdown(f"**⚠️ 退出市场（{prev_year}年有，{latest}年无记录）**")
-            if not lost_markets.empty:
-                st.dataframe(lost_markets[["贸易伙伴名称","金额_美元"]].rename(
-                    columns={"金额_美元":"去年出口额"}), use_container_width=True, hide_index=True)
-            else:
-                st.caption("无退出市场")
+                st.dataframe(fallers[["贸易伙伴名称","所属区域","今年","去年","金额同比%"]].rename(
+                    columns={"今年":"今年出口额","去年":"去年出口额","金额同比%":"同比%"}),
+                    use_container_width=True, hide_index=True)
 
     st.markdown("---")
 
@@ -533,12 +537,11 @@ if not month_df.empty:
             st.dataframe(ys, use_container_width=True, hide_index=True)
 
         if incomplete_years_from_month:
-            st.caption(f"注意：{incomplete_years_from_month} 年月度数据不满12个月，已从全年视图中排除，避免与全年数据混比。")
+            st.caption(f"注：{incomplete_years_from_month} 年数据不满12个月，未纳入全年视图。")
 
 # ---------- 没有月度数据：只能快照（如水龙头只有单一年份）----------
 else:
-    st.warning(f"{selected_dataset} **没有月度数据（无有效月份）**，无法做前N月同比，"
-               "以下仅作单期快照。若该数据集只有 1 个年份，则无法计算任何同比。")
+    st.info(f"{selected_dataset} 无月度数据，以下为最新年度快照。")
     years = sorted(int(y) for y in year_df["统计年份"].dropna().unique())
     st.caption(f"可用年份：{years}")
     latest = years[-1] if years else None
@@ -579,7 +582,7 @@ st.markdown("""
 <div class="footer">
   <div>
     <span style="font-size:1rem;font-weight:700;color:#eaf3ff;">📊 卫浴与泛家居进出口多维洞察大屏</span><br>
-    <span style="font-size:.78rem;">同比口径说明：各年取相同月份汇总后逐年同比，缺月度数据的年份不参与同比，避免「部分年 vs 全年」的错误对比。</span>
+    <span style="font-size:.78rem;">同比口径：各年取相同月份汇总后逐年同比。</span>
   </div>
   <div style="text-align:right;line-height:1.8;">
     <span style="color:#22d3ee;font-weight:700;">作者 · sze</span><br>
