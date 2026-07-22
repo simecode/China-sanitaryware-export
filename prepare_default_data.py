@@ -215,11 +215,19 @@ def process_files(dataset_name):
         print(f"  🧹 防重复：{dropped_years} 年同时存在月度与年度文件，已丢弃年度行 "
               f"（{before-len(final):,} 行），以月度为准")
 
+    # —— 预聚合：应用侧只用到 年/月/区域/省份/目的地 维度，按此汇总金额与数量，
+    #    丢弃商品编码/产品分类等明细行，行数大减、加载更快（尤其浏览器 WASM 部署）——
+    before_agg = len(final)
+    dims = ["统计年份", "月份", "数据粒度", "所属区域", "注册地名称", "贸易伙伴名称"]
+    final = (final.groupby(dims, dropna=False, as_index=False)
+                  .agg({"金额_美元": "sum", "数量_统一": "sum"}))
+    final["贸易类型"] = "出口"
+
     out_name = "6910" if dataset_name == "6910" else "faucet"
     out_path = os.path.join(OUTPUT_DIR, f"default_{out_name}.parquet")
     final.to_parquet(out_path, compression="snappy", index=False)
     span = final.groupby(["统计年份", "数据粒度"]).size().to_dict()
-    print(f"  🎉 写出 {out_path}（{len(final):,} 行）；分布 {span}")
+    print(f"  🎉 写出 {out_path}（预聚合 {before_agg:,} → {len(final):,} 行）；分布 {span}")
     return True
 
 
