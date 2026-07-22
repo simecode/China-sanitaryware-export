@@ -33,7 +33,7 @@ DATASETS = {
     "水龙头/龙头": "data/default_faucet.parquet",
 }
 
-st.set_page_config(page_title="卫浴与泛家居进出口洞察", layout="wide")
+st.set_page_config(page_title="贸易可视化地图", layout="wide")
 
 # ================= 全局样式（Ventriloc 编辑风 · 暖白纸底 + 橙色点睛）=================
 st.markdown("""
@@ -140,8 +140,8 @@ hr{ border-color:var(--mist); }
 # ================= 顶部页头 =================
 st.markdown("""
 <div class="top-banner">
-  <h1>卫浴与泛家居进出口洞察</h1>
-  <div class="subtitle">Sanitaryware &amp; Home Export Intelligence · 中国海关数据</div>
+  <h1>贸易可视化地图</h1>
+  <div class="subtitle">Trade Visualization · 卫浴与泛家居出口 · 中国海关数据</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -422,9 +422,13 @@ if not month_df.empty:
             bar = annual_sp.copy()
             bar["年份"] = bar["统计年份"].astype(str)
             bar["金额_亿"] = bar["金额_美元"] / 1e8
-            fig0 = px.bar(bar, x="年份", y="金额_亿", text_auto=".2f",
-                          title=f"历年{plabel}出口额（亿美元）")
-            fig0.update_yaxes(title_text="金额（亿美元）")
+            fig0 = px.area(bar.sort_values("统计年份"), x="年份", y="金额_亿", markers=True)
+            fig0.update_traces(line_color="#ff682c", line_width=2,
+                               fillcolor="rgba(255,104,44,0.10)",
+                               marker=dict(size=6, color="#ff682c"),
+                               hovertemplate="%{x}<br>%{y:.2f} 亿美元<extra></extra>")
+            fig0.update_yaxes(title_text="金额（亿美元）"); fig0.update_xaxes(title_text="")
+            fig0.update_layout(title=f"历年{plabel}出口额（亿美元）")
             st.plotly_chart(fig0, use_container_width=True)
             show = disp_money(annual_sp[["统计年份", "金额_美元", "上年同期", "金额同比%"]],
                               ["金额_美元", "上年同期"])
@@ -447,9 +451,11 @@ if not month_df.empty:
         st.subheader(f"{latest} 年{plabel} 出口省份 TOP10")
         ptop = province_sp[province_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False).head(10)
         if not ptop.empty:
-            ptb = add_yi(ptop)
-            fig2 = px.pie(ptb, names="注册地名称", values="金额_亿", hole=0.4)
-            fig2.update_traces(hovertemplate="%{label}<br>%{value:.2f} 亿美元 (%{percent})")
+            ptb = add_yi(ptop).sort_values("金额_亿")
+            fig2 = px.bar(ptb, x="金额_亿", y="注册地名称", orientation="h", text_auto=".2f")
+            fig2.update_traces(marker_color="#816729",
+                               hovertemplate="%{y}<br>%{x:.2f} 亿美元<extra></extra>")
+            fig2.update_layout(xaxis_title="金额（亿美元）", yaxis_title="")
             st.plotly_chart(fig2, use_container_width=True)
 
     # 区域
@@ -527,21 +533,24 @@ if not month_df.empty:
 
         st.markdown("---")
 
-        # ── 2. 市场份额变化 ──────────────────────────────────────────
-        st.subheader(f"市场份额迁移：{prev_year}→{latest} 各区域占比变化（百分点）")
-        share_cur  = region_sp[region_sp["统计年份"] == latest ][["所属区域","金额份额%"]].rename(columns={"金额份额%":"今年份额%"})
-        share_prev = region_sp[region_sp["统计年份"] == prev_year][["所属区域","金额份额%"]].rename(columns={"金额份额%":"去年份额%"})
-        share = share_cur.merge(share_prev, on="所属区域", how="outer").fillna(0)
-        share = share[share["所属区域"].isin(keep_regions)]
-        share["份额变化ppt"] = (share["今年份额%"] - share["去年份额%"]).round(2)
-        share["方向"] = share["份额变化ppt"].apply(lambda x: "提升" if x >= 0 else "下降")
-        share = share.sort_values("份额变化ppt")
-        fig_s = px.bar(share, x="份额变化ppt", y="所属区域", orientation="h",
-                       color="方向", color_discrete_map={"提升":"#816729","下降":"#ff682c"},
-                       text=share["份额变化ppt"].apply(lambda v: f"{'+'if v>=0 else ''}{v:.1f}ppt"),
-                       title=f"各区域出口份额变化（百分点）")
-        fig_s.update_traces(textposition="outside")
-        fig_s.update_layout(xaxis_title="份额变化（ppt）")
+        # ── 2. 份额结构演变（各区域占比逐年，100% 堆叠柱）──────────────
+        st.subheader("出口份额结构演变（各区域占比逐年）")
+        st.caption(f"每根柱为当年 100%，堆叠展示各区域份额；取 {latest} 年前六大区域，其余归「其他」。")
+        rev = region_sp[["统计年份", "所属区域", "金额份额%"]].copy()
+        topregs = region_sp[region_sp["统计年份"] == latest].nlargest(6, "金额_美元")["所属区域"].tolist()
+        rev["区域"] = rev["所属区域"].where(rev["所属区域"].isin(topregs), "其他")
+        revg = rev.groupby(["统计年份", "区域"], as_index=False)["金额份额%"].sum()
+        revg["年份"] = revg["统计年份"].astype(str)
+        order = topregs + ["其他"]
+        cmap = {r: EDIT_SEQ[i % len(EDIT_SEQ)] for i, r in enumerate(topregs)}
+        cmap["其他"] = "#cfcabf"
+        fig_s = px.bar(revg, x="年份", y="金额份额%", color="区域",
+                       category_orders={"区域": order}, color_discrete_map=cmap,
+                       title="各区域出口份额结构（%）")
+        fig_s.update_layout(barmode="stack", yaxis_title="份额（%）", xaxis_title="",
+                            legend_title_text="", bargap=0.25)
+        fig_s.update_yaxes(range=[0, 100], ticksuffix="%")
+        fig_s.update_traces(hovertemplate="%{x}｜%{fullData.name}：%{y:.1f}%<extra></extra>")
         st.plotly_chart(fig_s, use_container_width=True)
 
         st.markdown("---")
