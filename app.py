@@ -168,7 +168,7 @@ with st.sidebar:
     st.markdown("---")
     st.header("引擎配置")
     analysis_mode = st.radio("选择分析维度",
-                             ["同口径(前N月)对比", "月度动态演变", "历年全年(完整年份)"])
+                             ["同口径(前N月)对比", "月度动态演变", "年度动态演变"])
 
     st.markdown("---")
     st.header("AI 接入")
@@ -180,24 +180,6 @@ with st.sidebar:
     use_builtin = st.checkbox("使用内置默认数据（无需上传）", value=True)
     selected_dataset = (st.selectbox("选择内置数据集", options=list(DATASETS.keys()), index=0)
                         if use_builtin else None)
-
-
-def render_about():
-    """作者/联系卡片——渲染在侧边栏最底部（在所有筛选控件之后）。"""
-    with st.sidebar:
-        st.markdown("---")
-        st.markdown("""
-        <div style="padding:16px 16px;border:1px solid #e8e8e8;border-radius:6px 0 0 0;background:#ffffff;">
-          <div style="font-size:.68rem;color:#816729;letter-spacing:.2em;margin-bottom:10px;font-weight:600;">ABOUT</div>
-          <div style="color:#202020;font-size:.9rem;font-weight:600;">作者 · sze</div>
-          <div style="color:#4d4d4d;font-size:.84rem;margin-top:6px;">
-            交流 · <a href="tel:13760765317" style="color:#ff682c;text-decoration:none;border-bottom:1px solid #ff682c;">137-6076-5317</a>
-          </div>
-          <div style="color:#828282;font-size:.72rem;margin-top:12px;line-height:1.5;">
-            数据仅供研究参考<br>不构成商业建议
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3600)
@@ -319,7 +301,7 @@ if not month_df.empty:
         st.markdown("---")
         st.header("年份筛选")
         selected_years = st.multiselect(
-            "参与对比的年份", options=all_years, default=all_years)
+            "年份", options=all_years, default=all_years, label_visibility="collapsed")
     if not selected_years:
         selected_years = all_years
 
@@ -334,7 +316,7 @@ if not month_df.empty:
         st.markdown("---")
         st.header("月份筛选")
         show_months = st.multiselect(
-            "参与对比的月份", options=months, default=months)
+            "月份", options=months, default=months, label_visibility="collapsed")
     if not show_months:
         show_months = months
 
@@ -360,12 +342,27 @@ if not month_df.empty:
     cur_yoy = cur_yoy.iloc[0] if len(cur_yoy) and pd.notna(cur_yoy.iloc[0]) else None
     prev_total = float(annual_sp.loc[annual_sp["统计年份"] == prev_year, "金额_美元"].sum()) if prev_ok else None
 
+    # 最新月环比（本月对上月；1月对上年12月）
+    _ly = month_df[month_df["统计年份"] == latest].groupby("月份")["金额_美元"].sum()
+    _lm = max(show_months) if show_months else (int(_ly.index.max()) if len(_ly) else None)
+    mom_label, mom_val, mom_delta = "最新月环比", "—", None
+    if _lm is not None and _lm in _ly.index:
+        if _lm == 1:
+            _pv = float(month_df[(month_df["统计年份"] == latest - 1) & (month_df["月份"] == 12)]["金额_美元"].sum())
+        else:
+            _pv = float(_ly.get(_lm - 1, 0))
+        _cv = float(_ly[_lm])
+        if _pv > 0:
+            mom_label = f"{int(_lm)} 月环比（对上月）"
+            mom_val = fmt_money(_cv)
+            mom_delta = f"{(_cv - _pv) / _pv * 100:+.1f}%"
+
     st.markdown(f"### {latest} 年{plabel} 全球市场贸易格局透视")
     ca, cb, cc = st.columns(3)
     ca.metric(f"{latest} 年{plabel}出口总额", fmt_money(cur_total),
               delta=(f"{cur_yoy:+.2f}%" if cur_yoy is not None else None))
     cb.metric(f"{prev_year} 年同期", fmt_money(prev_total) if prev_total is not None else "无月度数据")
-    cc.metric("活跃目的地数量", int(sp.loc[sp["统计年份"] == latest, "贸易伙伴名称"].nunique()))
+    cc.metric(mom_label, mom_val, delta=mom_delta)
 
     st.markdown("---")
 
@@ -378,12 +375,10 @@ if not month_df.empty:
         if not md.empty:
             if len(show_months) == 1:
                 mb = md.sort_values("统计年份")
-                fig = px.bar(mb, x="年份", y="金额_亿", text_auto=".2f",
-                             title=f"{show_months[0]} 月出口额：各年对比（亿美元）")
+                fig = px.bar(mb, x="年份", y="金额_亿", text_auto=".2f")
             else:
                 fig = px.line(md.sort_values(["年份", "月份"]), x="月份", y="金额_亿",
-                              color="年份", markers=True,
-                              title=f"各年 {'、'.join(str(m) for m in show_months)}月 出口额对比（亿美元）")
+                              color="年份", markers=True)
                 fig.update_layout(xaxis_type="category", xaxis_tickangle=0)
             fig.update_yaxes(title_text="金额（亿美元）")
             st.plotly_chart(fig, use_container_width=True)
@@ -612,7 +607,7 @@ if not month_df.empty:
 
     # 历年全年：优先用月度数据里『满12个月』的年份汇总出真实全年总额，
     # 没有月度数据来源的年份再用年度（全年快照）文件补充；不满12个月的年份一律排除。
-    if analysis_mode == "历年全年(完整年份)":
+    if analysis_mode == "年度动态演变":
         st.markdown("---")
         st.subheader("历年全年出口额（仅完整年份）")
 
@@ -685,9 +680,6 @@ else:
                                            (u["金额_美元"] / u["数量_统一"]).round(4), np.nan)
             u = u[u["金额_美元"] > 0].sort_values("出口单价（美元/单位）", ascending=False).head(10)
             st.dataframe(u, use_container_width=True, hide_index=True)
-
-# 作者卡片渲染在侧边栏最底部（此时所有筛选控件已加入侧边栏）
-render_about()
 
 st.markdown("""
 <div class="footer">
