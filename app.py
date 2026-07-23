@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import plotly.io as pio
 import numpy as np
 import os
@@ -41,6 +42,59 @@ px.defaults.color_discrete_sequence = EDIT_SEQ
 px.defaults.color_continuous_scale = "Oranges"
 
 MAPPING_FILE_NAME = "区域映射表.xlsx"
+
+# —— 主要贸易伙伴经纬度（用于出口流向地图；覆盖约九成出口额）——
+CN_ORIGIN = (34.0, 108.9)  # 中国大致中心，作为流向起点
+COUNTRY_COORDS = {
+    "美国": (39.8, -98.6), "越南": (16.0, 107.8), "泰国": (15.0, 101.0), "新加坡": (1.35, 103.8),
+    "韩国": (36.5, 127.8), "马来西亚": (4.2, 101.9), "英国": (54.0, -2.0), "澳大利亚": (-25.3, 133.8),
+    "加拿大": (56.1, -106.3), "俄罗斯": (61.5, 105.3), "菲律宾": (12.9, 121.8), "西班牙": (40.0, -3.7),
+    "巴西": (-14.2, -51.9), "墨西哥": (23.6, -102.5), "沙特阿拉伯": (23.9, 45.1), "印度尼西亚": (-2.5, 118.0),
+    "法国": (46.6, 2.2), "波兰": (51.9, 19.1), "印度": (22.0, 79.0), "阿联酋": (24.0, 54.0),
+    "德国": (51.2, 10.4), "意大利": (42.8, 12.8), "荷兰": (52.1, 5.3), "中国台湾": (23.7, 121.0),
+    "秘鲁": (-9.2, -75.0), "哈萨克斯坦": (48.0, 66.9), "智利": (-35.7, -71.5), "哥伦比亚": (4.6, -74.3),
+    "希腊": (39.1, 21.8), "吉尔吉斯斯坦": (41.2, 74.8), "吉布提": (11.8, 42.6), "柬埔寨": (12.6, 104.9),
+    "以色列": (31.0, 34.8), "摩洛哥": (31.8, -7.1), "斯里兰卡": (7.9, 80.8), "阿根廷": (-38.4, -63.6),
+    "肯尼亚": (-0.02, 37.9), "中国香港": (22.3, 114.2), "新西兰": (-41.8, 172.0), "加纳": (7.9, -1.0),
+    "南非": (-30.6, 22.9), "多米尼加": (18.7, -70.2), "罗马尼亚": (45.9, 24.9), "孟加拉国": (23.7, 90.4),
+    "坦桑尼亚": (-6.4, 34.9), "日本": (36.2, 138.3), "土耳其": (39.0, 35.2), "埃及": (26.8, 30.8),
+    "尼日利亚": (9.1, 8.7), "科威特": (29.3, 47.5), "卡塔尔": (25.3, 51.2), "伊拉克": (33.2, 43.7),
+}
+
+
+def render_flow_map(dfp, latest_year):
+    """出口流向世界地图：从中国到各主要目的地的弧线，线宽/点大小随出口额。"""
+    flow = (dfp[dfp["统计年份"] == latest_year]
+            .groupby("贸易伙伴名称")["金额_美元"].sum())
+    flow = flow[flow.index.isin(COUNTRY_COORDS) & (flow > 0)]
+    if flow.empty:
+        return
+    maxv = float(flow.max())
+    fig = go.Figure()
+    for name, val in flow.items():
+        lat, lon = COUNTRY_COORDS[name]
+        r = val / maxv
+        fig.add_trace(go.Scattergeo(
+            lat=[CN_ORIGIN[0], lat], lon=[CN_ORIGIN[1], lon], mode="lines",
+            line=dict(width=0.6 + 4.5 * r, color="#ff682c"),
+            opacity=0.25 + 0.45 * r, hoverinfo="skip", showlegend=False))
+    fig.add_trace(go.Scattergeo(
+        lat=[COUNTRY_COORDS[n][0] for n in flow.index],
+        lon=[COUNTRY_COORDS[n][1] for n in flow.index],
+        text=[f"{n}：{v/1e8:.2f}亿美元" for n, v in flow.items()],
+        marker=dict(size=[5 + 16 * (v / maxv) for v in flow.values],
+                    color="#ff682c", opacity=0.75, line=dict(width=0)),
+        mode="markers", hoverinfo="text", showlegend=False))
+    fig.add_trace(go.Scattergeo(
+        lat=[CN_ORIGIN[0]], lon=[CN_ORIGIN[1]], mode="markers",
+        marker=dict(size=11, color="#202020"), text=["中国"], hoverinfo="text", showlegend=False))
+    fig.update_geos(showcountries=True, countrycolor="#e2ded6",
+                    showland=True, landcolor="#efeae1", showocean=True, oceancolor="#ffffff",
+                    showcoastlines=False, projection_type="natural earth",
+                    bgcolor="rgba(0,0,0,0)", showframe=False)
+    fig.update_layout(margin=dict(t=0, l=0, r=0, b=0), height=440,
+                      paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width='stretch')
 
 # ================= 内置数据映射 =================
 DATASETS = {
@@ -274,9 +328,9 @@ def fmt_money(v):
         return "—"
     v = float(v)
     if abs(v) >= 1e8:
-        return f"{v/1e8:,.2f} 亿美元"
+        return f"{v/1e8:,.2f}亿美元"
     if abs(v) >= 1e4:
-        return f"{v/1e4:,.1f} 万美元"
+        return f"{v/1e4:,.1f}万美元"
     return f"${v:,.0f}"
 
 
@@ -334,7 +388,7 @@ if not month_df.empty:
     plabel = f"前{n}月" if is_prefix else mlabel
 
     if not prev_ok:
-        st.caption(f"缺 {prev_year} 年月度数据，同比暂无法计算。")
+        st.caption(f"缺 {prev_year}年月度数据，同比暂无法计算。")
 
     annual_sp = yoy_table(sp, [])
     partner_sp = yoy_table(sp, ["贸易伙伴名称", "所属区域"])
@@ -357,16 +411,21 @@ if not month_df.empty:
             _pv = float(_ly.get(_lm - 1, 0))
         _cv = float(_ly[_lm])
         if _pv > 0:
-            mom_label = f"{int(_lm)} 月环比（对上月）"
+            mom_label = f"{int(_lm)}月环比"
             mom_val = fmt_money(_cv)
             mom_delta = f"{(_cv - _pv) / _pv * 100:+.1f}%"
 
-    st.markdown(f"### {latest} 年{plabel} 全球市场贸易格局透视")
+    st.markdown(f"### {latest}年{plabel}全球市场贸易格局透视")
     ca, cb, cc = st.columns(3)
-    ca.metric(f"{latest} 年{plabel}出口总额", fmt_money(cur_total),
+    ca.metric(f"{latest}年{plabel}出口总额", fmt_money(cur_total),
               delta=(f"{cur_yoy:+.2f}%" if cur_yoy is not None else None))
-    cb.metric(f"{prev_year} 年同期", fmt_money(prev_total) if prev_total is not None else "无月度数据")
+    cb.metric(f"{prev_year}年同期", fmt_money(prev_total) if prev_total is not None else "无月度数据")
     cc.metric(mom_label, mom_val, delta=mom_delta)
+
+    # 出口流向世界地图（销往哪里）
+    st.subheader("出口流向（销往哪里）")
+    st.caption("线条由中国指向各目的地，粗细/圆点大小随出口额；仅显示主要贸易伙伴")
+    render_flow_map(sp, latest)
 
     st.markdown("---")
 
@@ -403,10 +462,10 @@ if not month_df.empty:
                                 legend=dict(orientation="h", y=1.14))
                 return f
 
-            st.subheader(f"{latest} 年月度出口额与同比")
+            st.subheader(f"{latest}年月度出口额与同比")
             st.plotly_chart(_bar_line("同比%", "#ff682c"), width='stretch')
 
-            st.subheader(f"{latest} 年月度出口额与环比")
+            st.subheader(f"{latest}年月度出口额与环比")
             st.plotly_chart(_bar_line("环比%", "#816729"), width='stretch')
 
             tshow = ly[["月标签", "金额_美元", "同比%", "环比%"]].copy()
@@ -416,11 +475,12 @@ if not month_df.empty:
             mv = dict(zip(ly["月份"].astype(int), ly["金额_美元"]))
             if all(q in mv for q in [1, 2, 3]) and all(q in mv for q in [4, 5, 6]):
                 q1 = mv[1] + mv[2] + mv[3]; q2 = mv[4] + mv[5] + mv[6]
-                st.markdown(f"**季度环比**：二季度 {q2/1e8:.2f} 亿美元 vs 一季度 {q1/1e8:.2f} 亿美元，"
+                st.markdown(f"**季度环比**：二季度 {q2/1e8:.2f}亿美元 vs 一季度 {q1/1e8:.2f}亿美元，"
                             f"环比 **{(q2-q1)/q1*100:+.1f}%**")
 
     else:
-        st.subheader(f"历年{plabel}出口额（同口径）")
+        st.subheader(f"历年{plabel}出口额")
+        st.caption("单位：亿美元")
         if not annual_sp.empty:
             bar = annual_sp.copy()
             bar["年份"] = bar["统计年份"].astype(str)
@@ -429,9 +489,8 @@ if not month_df.empty:
             fig0.update_traces(line_color="#ff682c", line_width=2,
                                fillcolor="rgba(255,104,44,0.10)",
                                marker=dict(size=6, color="#ff682c"),
-                               hovertemplate="%{x}<br>%{y:.2f} 亿美元<extra></extra>")
+                               hovertemplate="%{x}<br>%{y:.2f}亿美元<extra></extra>")
             fig0.update_yaxes(title_text="金额（亿美元）"); fig0.update_xaxes(title_text="")
-            fig0.update_layout(title=f"历年{plabel}出口额（亿美元）")
             st.plotly_chart(fig0, width='stretch')
             show = disp_money(annual_sp[["统计年份", "金额_美元", "上年同期", "金额同比%"]],
                               ["金额_美元", "上年同期"])
@@ -440,7 +499,7 @@ if not month_df.empty:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader(f"{latest} 年{plabel} 前十大出口目的地")
+        st.subheader(f"{latest}年{plabel}前十大出口目的地")
         top = partner_sp[partner_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False).head(10)
         if not top.empty:
             topb = add_yi(top)
@@ -448,13 +507,13 @@ if not month_df.empty:
             fig1.update_layout(xaxis_tickangle=-30); fig1.update_yaxes(title_text="金额（亿美元）")
             st.plotly_chart(fig1, width='stretch')
     with col2:
-        st.subheader(f"{latest} 年{plabel} 出口省份 TOP10")
+        st.subheader(f"{latest}年{plabel}出口省份TOP10")
         ptop = province_sp[province_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False).head(10)
         if not ptop.empty:
             ptb = add_yi(ptop).sort_values("金额_亿")
             fig2 = px.bar(ptb, x="金额_亿", y="注册地名称", orientation="h", text_auto=".2f")
             fig2.update_traces(marker_color="#816729",
-                               hovertemplate="%{y}<br>%{x:.2f} 亿美元<extra></extra>")
+                               hovertemplate="%{y}<br>%{x:.2f}亿美元<extra></extra>")
             fig2.update_layout(xaxis_title="金额（亿美元）", yaxis_title="")
             st.plotly_chart(fig2, width='stretch')
 
@@ -465,7 +524,7 @@ if not month_df.empty:
         st.dataframe(tshow, width='stretch', hide_index=True)
 
     # 区域
-    st.subheader(f"{latest} 年{plabel} 区域分布")
+    st.subheader(f"{latest}年{plabel}区域分布")
     rnow = region_sp[region_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False)
     if (rnow["所属区域"] == "其他").all():
         st.warning("区域全部为「其他」：请把『区域映射表.xlsx』放到根目录后重跑 prepare，以启用区域映射。")
@@ -480,7 +539,7 @@ if not month_df.empty:
                      width='stretch', hide_index=True)
 
     # 出口结构（区域 › 国家）
-    st.subheader(f"{latest} 年{plabel} 出口结构（区域 › 国家）")
+    st.subheader(f"{latest}年{plabel}出口结构")
     tm = sp[sp["统计年份"] == latest].groupby(["所属区域", "贸易伙伴名称"], as_index=False)["金额_美元"].sum()
     tm = tm[tm["金额_美元"] > 0]
     if not tm.empty:
@@ -491,7 +550,7 @@ if not month_df.empty:
                             custom_data=["金额_亿"])
         fig_tm.update_traces(
             texttemplate="%{label}  %{percentParent}",
-            hovertemplate="%{label}<br>%{customdata[0]:.2f} 亿美元<extra></extra>",
+            hovertemplate="%{label}<br>%{customdata[0]:.2f}亿美元<extra></extra>",
             tiling=dict(pad=2), root_color="#ffffff",
             marker_line_color="#ffffff", marker_line_width=2, textfont=dict(color="#202020"))
         fig_tm.update_layout(margin=dict(t=6, l=0, r=0, b=0), height=460,
@@ -513,8 +572,8 @@ if not month_df.empty:
                         or (_rp.get(r, 0) / tot_prev_r if tot_prev_r else 0) >= 0.01}
 
         # ── 1. 增长贡献分解 ──────────────────────────────────────────
-        st.subheader(f"增长贡献分解：{prev_year}→{latest} 各区域拉动/拖累")
-        st.caption("已剔除份额不足 1% 的小基数区域及「其他」")
+        st.subheader("增长贡献分解")
+        st.caption("已剔除份额不足 1% 的小基数区域及「其他」；单位：亿美元")
         r_cur  = region_sp[region_sp["统计年份"] == latest ][["所属区域","金额_美元"]].rename(columns={"金额_美元":"今年"})
         r_prev = region_sp[region_sp["统计年份"] == prev_year][["所属区域","金额_美元"]].rename(columns={"金额_美元":"去年"})
         contrib = r_cur.merge(r_prev, on="所属区域", how="outer").fillna(0)
@@ -526,8 +585,7 @@ if not month_df.empty:
         contrib["贡献_亿"] = contrib["贡献额"] / 1e8
         fig_c = px.bar(contrib, x="贡献_亿", y="所属区域", orientation="h",
                        color="方向", color_discrete_map={"拉动":"#816729","拖累":"#ff682c"},
-                       text=contrib["贡献额"].apply(lambda v: f"{'+'if v>=0 else ''}{v/1e8:.2f}亿"),
-                       title=f"{prev_year}→{latest} 各区域对总出口变化的贡献（亿美元）")
+                       text=contrib["贡献额"].apply(lambda v: f"{'+'if v>=0 else ''}{v/1e8:.2f}亿"))
         fig_c.update_traces(textposition="outside")
         fig_c.update_layout(showlegend=True, xaxis_title="贡献额（亿美元）")
         st.plotly_chart(fig_c, width='stretch')
@@ -540,8 +598,8 @@ if not month_df.empty:
         st.markdown("---")
 
         # ── 2. 份额结构演变（各区域占比逐年，100% 堆叠柱）──────────────
-        st.subheader("出口份额结构演变（各区域占比逐年）")
-        st.caption(f"每根柱为当年 100%，堆叠展示各区域份额；取 {latest} 年前六大区域，其余归「其他」。")
+        st.subheader("出口份额结构演变")
+        st.caption(f"每根柱为当年 100%，堆叠展示各区域份额；取 {latest}年前六大区域，其余归「其他」。")
         rev = region_sp[["统计年份", "所属区域", "金额份额%"]].copy()
         topregs = region_sp[region_sp["统计年份"] == latest].nlargest(6, "金额_美元")["所属区域"].tolist()
         rev["区域"] = rev["所属区域"].where(rev["所属区域"].isin(topregs), "其他")
@@ -551,8 +609,7 @@ if not month_df.empty:
         cmap = {r: EDIT_SEQ[i % len(EDIT_SEQ)] for i, r in enumerate(topregs)}
         cmap["其他"] = "#cfcabf"
         fig_s = px.bar(revg, x="年份", y="金额份额%", color="区域",
-                       category_orders={"区域": order}, color_discrete_map=cmap,
-                       title="各区域出口份额结构（%）")
+                       category_orders={"区域": order}, color_discrete_map=cmap)
         fig_s.update_layout(barmode="stack", yaxis_title="份额（%）", xaxis_title="",
                             legend_title_text="", bargap=0.25)
         fig_s.update_yaxes(range=[0, 100], ticksuffix="%")
@@ -565,7 +622,7 @@ if not month_df.empty:
         # 基数门槛：今年、去年出口额均需达到当期总额的约0.3%（下限100万美元），
         # 只保留有真实体量的市场，剔除小基数市场。
         base_floor = max(1e6, 0.003 * cur_total)
-        st.subheader(f"高增长 & 深回调市场（{prev_year}→{latest}，国家粒度）")
+        st.subheader("高增长 & 深回调市场")
         st.caption(f"仅统计两年出口额均 ≥ ${base_floor/1e6:.1f}M 的市场（剔除小基数市场）")
 
         p_cur  = partner_sp[partner_sp["统计年份"] == latest ][["贸易伙伴名称","所属区域","金额_美元","金额同比%"]].rename(columns={"金额_美元":"今年"})
@@ -578,7 +635,7 @@ if not month_df.empty:
 
         c3a, c3b = st.columns(2)
         with c3a:
-            st.markdown("**增速领先 TOP10（同比%）**")
+            st.markdown("**增速领先 TOP10**")
             if not risers.empty:
                 fig_r = px.bar(risers.sort_values("金额同比%"), x="金额同比%", y="贸易伙伴名称",
                                orientation="h", color="所属区域", text_auto=".1f",
@@ -589,7 +646,7 @@ if not month_df.empty:
                 rt.columns = ["贸易伙伴名称","所属区域","今年出口额（亿美元）","去年出口额（亿美元）","同比%"]
                 st.dataframe(rt, width='stretch', hide_index=True)
         with c3b:
-            st.markdown("**跌幅最深 TOP10（同比%）**")
+            st.markdown("**跌幅最深 TOP10**")
             if not fallers.empty:
                 fig_f = px.bar(fallers.sort_values("金额同比%", ascending=False), x="金额同比%", y="贸易伙伴名称",
                                orientation="h", color="所属区域", text_auto=".1f",
@@ -606,7 +663,8 @@ if not month_df.empty:
     # 没有月度数据来源的年份再用年度（全年快照）文件补充；不满12个月的年份一律排除。
     if analysis_mode == "年度动态演变":
         st.markdown("---")
-        st.subheader("历年全年出口额（仅完整年份）")
+        st.subheader("历年全年出口额")
+        st.caption("单位：亿美元")
 
         month_counts = month_df_sel.groupby("统计年份")["月份"].nunique()
         full_years_from_month = sorted(int(y) for y in month_counts[month_counts >= 12].index)
@@ -628,7 +686,7 @@ if not month_df.empty:
         else:
             yfull = yoy_table(pd.concat(full_parts, ignore_index=True), [])
             yb = yfull.copy(); yb["年份"] = yb["统计年份"].astype(str); yb["金额_亿"] = yb["金额_美元"] / 1e8
-            fig_y = px.bar(yb, x="年份", y="金额_亿", text_auto=".2f", title="历年全年出口额（亿美元）")
+            fig_y = px.bar(yb, x="年份", y="金额_亿", text_auto=".2f")
             fig_y.update_yaxes(title_text="金额（亿美元）")
             st.plotly_chart(fig_y, width='stretch')
             ys = disp_money(yfull[["统计年份", "金额_美元", "上年同期", "金额同比%"]], ["金额_美元", "上年同期"])
@@ -636,7 +694,7 @@ if not month_df.empty:
             st.dataframe(ys, width='stretch', hide_index=True)
 
         if incomplete_years_from_month:
-            st.caption(f"注：{incomplete_years_from_month} 年数据不满12个月，未纳入全年视图。")
+            st.caption(f"注：{incomplete_years_from_month}年数据不满12个月，未纳入全年视图。")
 
 # ---------- 没有月度数据：只能快照（如水龙头只有单一年份）----------
 else:
@@ -646,9 +704,9 @@ else:
     latest = years[-1] if years else None
     if latest is not None:
         snap = year_df[year_df["统计年份"] == latest]
-        st.markdown(f"### {latest} 年市场快照")
+        st.markdown(f"### {latest}年市场快照")
         ca, cb = st.columns(2)
-        ca.metric(f"{latest} 年出口总额", fmt_money(snap['金额_美元'].sum()))
+        ca.metric(f"{latest}年出口总额", fmt_money(snap['金额_美元'].sum()))
         cb.metric("活跃目的地数量", int(snap["贸易伙伴名称"].nunique()))
         st.markdown("---")
         c1, c2 = st.columns(2)
@@ -666,11 +724,11 @@ else:
                     .sort_values("金额_美元", ascending=False).head(10)
             p = add_yi(p)
             fig_p = px.pie(p, names="注册地名称", values="金额_亿", hole=0.4)
-            fig_p.update_traces(hovertemplate="%{label}<br>%{value:.2f} 亿美元 (%{percent})")
+            fig_p.update_traces(hovertemplate="%{label}<br>%{value:.2f}亿美元 (%{percent})")
             st.plotly_chart(fig_p, width='stretch')
         # 单价（若有重量）
         if (snap["数量_统一"] > 0).any():
-            st.subheader("高附加值市场 TOP10（按出口单价）")
+            st.subheader("高附加值市场TOP10")
             u = snap.groupby(["贸易伙伴名称", "所属区域"], as_index=False).agg(
                 {"金额_美元": "sum", "数量_统一": "sum"})
             u["出口单价（美元/单位）"] = np.where(u["数量_统一"] > 0,
