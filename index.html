@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>贸易可视化地图</title>
+  <meta name="description" content="卫浴与泛家居出口多维洞察 · 中国海关数据" />
+
+  <!-- 微信/社交分享卡片（og） -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="贸易可视化地图" />
+  <meta property="og:description" content="卫浴与泛家居出口多维洞察 · 中国海关数据" />
+  <meta property="og:image" content="https://simecode.github.io/China-sanitaryware-export/assets/logo_icon.png" />
+  <meta property="og:url" content="https://simecode.github.io/China-sanitaryware-export/" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:image" content="https://simecode.github.io/China-sanitaryware-export/assets/logo_icon.png" />
+
+  <link rel="icon" href="./assets/logo_icon.png" />
+  <style>
+    :root{
+      --graphite:#202020; --canvas:#ffffff; --ash:#efefef; --mist:#e8e8e8;
+      --steel:#4d4d4d; --slate:#828282; --ember:#ff682c;
+      --font:'Inter',"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    }
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    html,body{ height:100%; }
+    body{
+      font-family:var(--font); background:var(--canvas); color:var(--graphite);
+      display:flex; align-items:center; justify-content:center; min-height:100vh; padding:28px;
+    }
+    .card{ width:100%; max-width:440px; text-align:center; }
+    .logo{ width:76px; height:76px; margin:0 auto 26px; display:block; }
+    h1{ font-size:2.1rem; font-weight:300; letter-spacing:-.03em; line-height:1.1; }
+    .sub{
+      color:var(--slate); font-size:.72rem; letter-spacing:.26em; text-transform:uppercase;
+      margin-top:14px; font-weight:500;
+    }
+    .desc{ color:var(--steel); font-size:.95rem; margin-top:22px; line-height:1.6; }
+    .btn{
+      display:inline-block; margin-top:34px; padding:14px 34px;
+      background:var(--graphite); color:#fff; text-decoration:none;
+      font-size:1rem; letter-spacing:.02em; border-radius:2px; transition:background .2s;
+    }
+    .btn:hover{ background:var(--ember); }
+    .tip{ color:var(--slate); font-size:.76rem; margin-top:16px; }
+    .foot{
+      margin-top:52px; color:var(--slate); font-size:.74rem; line-height:1.8;
+      border-top:1px solid var(--mist); padding-top:20px;
+    }
+    .foot a{ color:var(--ember); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="./assets/logo_mark.png" alt="S" />
+    <h1>贸易可视化地图</h1>
+    <div class="sub">Trade Visualization</div>
+    <p class="desc">卫浴与泛家居出口多维洞察<br>基于中国海关数据</p>
+    <a class="btn" href="https://tradevisualizationmap.streamlit.app/">打开数据大屏 →</a>
+    <p class="tip">点击进入完整交互大屏（筛选 · 图表 · 流向地图）</p>
+    <div class="foot">
+      作者 · sze　交流 · <a href="tel:13760765317">137-6076-5317</a><br>
+      数据来源：中国海关数据 · 仅供研究参考
+    </div>
+  </div>
+</body>
+</html>
