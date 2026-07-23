@@ -63,6 +63,11 @@ st.markdown("""
 }
 
 html, body, [data-testid="stAppViewContainer"] *, [data-testid="stSidebar"] * { font-family:var(--font); }
+/* 例外：Material 图标必须用图标字体，否则会显示成文字（如 keyboard_double_arrow_left） */
+[data-testid="stIconMaterial"], span[class*="material-symbols"], span[class*="material-icons"],
+.material-symbols-rounded, .material-symbols-outlined, .material-icons {
+  font-family:'Material Symbols Rounded','Material Symbols Outlined','Material Icons' !important;
+}
 
 /* 主背景：纯白画布，充足留白 */
 [data-testid="stAppViewContainer"]{ background:var(--canvas); }
@@ -130,9 +135,9 @@ hr{ border-color:var(--mist); }
 .footer a{ color:var(--slate); text-decoration:none; }
 .footer a:hover{ color:var(--ember); }
 
-/* 品牌 LOGO（侧边栏） */
-.brand{ padding:16px 2px 10px; }
-.brand img.logo{ display:block; height:40px; width:auto; }
+/* 品牌 LOGO（侧边栏，居中） */
+.brand{ padding:16px 2px 12px; text-align:center; }
+.brand img.logo{ display:block; height:40px; width:auto; margin:0 auto; }
 .brand .name{ font-weight:500; font-size:1.4rem; color:var(--graphite); letter-spacing:.04em; }
 
 /* ===== 移动端适配 ===== */
