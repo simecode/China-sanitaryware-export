@@ -4,8 +4,23 @@ import plotly.express as px
 import plotly.io as pio
 import numpy as np
 import os
+import base64
 import warnings
 warnings.filterwarnings('ignore')
+
+# —— 品牌 Logo：优先用裁好透明底的 logo_mark.png ——
+def _load_logo_b64():
+    for p in ("assets/logo_mark.png", "assets/logo.png"):
+        if os.path.exists(p):
+            try:
+                with open(p, "rb") as f:
+                    return base64.b64encode(f.read()).decode("ascii")
+            except Exception:
+                pass
+    return None
+
+LOGO_B64 = _load_logo_b64()
+LOGO_PATH = next((p for p in ("assets/logo_mark.png", "assets/logo.png") if os.path.exists(p)), None)
 
 # —— 图表统一走 Ventriloc 编辑风：白底 + 墨黑/暖灰 + 橙/黄铜点睛 ——
 # 近乎单色（graphite/steel/slate 灰阶）+ Ember 橙 + Brass 黄铜为暖色点缀
@@ -33,7 +48,8 @@ DATASETS = {
     "水龙头/龙头": "data/default_faucet.parquet",
 }
 
-st.set_page_config(page_title="贸易可视化地图", layout="wide")
+st.set_page_config(page_title="贸易可视化地图", layout="wide",
+                   page_icon=(LOGO_PATH or "📊"))
 
 # ================= 全局样式（Ventriloc 编辑风 · 暖白纸底 + 橙色点睛）=================
 st.markdown("""
@@ -115,9 +131,9 @@ hr{ border-color:var(--mist); }
 .footer a:hover{ color:var(--ember); }
 
 /* 品牌 LOGO（侧边栏） */
-.brand{ padding:16px 2px 8px; }
-.brand .logo{ display:inline-flex; align-items:center; }
-.brand .logo svg{ display:block; }
+.brand{ padding:16px 2px 10px; }
+.brand img.logo{ display:block; height:40px; width:auto; }
+.brand .name{ font-weight:500; font-size:1.4rem; color:var(--graphite); letter-spacing:.04em; }
 
 /* ===== 移动端适配 ===== */
 @media (max-width: 640px){
@@ -143,28 +159,12 @@ st.markdown("""
 
 # ================= 侧边栏 =================
 with st.sidebar:
-    _logo_svg = None
-    for _p in ("assets/logo.svg",):
-        if os.path.exists(_p):
-            try:
-                with open(_p, "r", encoding="utf-8") as _f:
-                    _logo_svg = _f.read()
-            except Exception:
-                _logo_svg = None
-    if _logo_svg:
-        st.markdown(f'<div class="brand"><div class="logo">{_logo_svg}</div></div>',
-                    unsafe_allow_html=True)
+    if LOGO_B64:
+        st.markdown(
+            f'<div class="brand"><img class="logo" src="data:image/png;base64,{LOGO_B64}" alt="logo"/></div>',
+            unsafe_allow_html=True)
     else:
-        st.markdown("""
-        <div class="brand">
-          <div class="logo">
-            <svg width="42" height="42" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M78 30 C78 18 62 14 47 18 C30 22 27 40 46 47 C66 54 73 60 71 72 C68 85 48 88 32 80"
-                    stroke="#202020" stroke-width="12" stroke-linecap="square"/>
-            </svg>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div class="brand"><div class="name">S</div></div>', unsafe_allow_html=True)
     st.markdown("---")
     st.header("引擎配置")
     analysis_mode = st.radio("选择分析维度",
