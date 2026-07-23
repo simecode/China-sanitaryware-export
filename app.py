@@ -96,6 +96,60 @@ def render_flow_map(dfp, latest_year):
                       paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width='stretch')
 
+
+def _hex_rgba(h, a):
+    h = h.lstrip("#")
+    return f"rgba({int(h[0:2],16)},{int(h[2:4],16)},{int(h[4:6],16)},{a})"
+
+
+def render_sankey(dfp, latest_year, top_prov=8, top_ctry=12):
+    """三级流向桑基：产地省份 → 目的地区域 → 目的地国家，宽度随出口额（亿美元）。"""
+    d = dfp[dfp["统计年份"] == latest_year][["注册地名称", "所属区域", "贸易伙伴名称", "金额_美元"]].copy()
+    d = d[d["金额_美元"] > 0]
+    if d.empty:
+        return
+    topp = set(d.groupby("注册地名称")["金额_美元"].sum().nlargest(top_prov).index)
+    d["省"] = d["注册地名称"].where(d["注册地名称"].isin(topp), "其他省份")
+    topc = set(d.groupby("贸易伙伴名称")["金额_美元"].sum().nlargest(top_ctry).index)
+    d["国"] = d["贸易伙伴名称"].where(d["贸易伙伴名称"].isin(topc), "其他国家")
+    d["区"] = d["所属区域"].replace("", "其他").fillna("其他")
+
+    def _order(sr, tail):
+        vals = sr.sort_values(ascending=False).index.tolist()
+        return [v for v in vals if v != tail] + ([tail] if tail in vals else [])
+
+    provs = _order(d.groupby("省")["金额_美元"].sum(), "其他省份")
+    regs = d.groupby("区")["金额_美元"].sum().sort_values(ascending=False).index.tolist()
+    ctrys = _order(d.groupby("国")["金额_美元"].sum(), "其他国家")
+    nodes = provs + regs + ctrys
+    idx = {n: i for i, n in enumerate(nodes)}
+
+    reg_colors = {r: EDIT_SEQ[i % len(EDIT_SEQ)] for i, r in enumerate(regs)}
+    node_colors = (["#3b3b3b"] * len(provs)
+                   + [reg_colors[r] for r in regs]
+                   + ["#b9b2a6"] * len(ctrys))
+
+    pr = d.groupby(["省", "区"], as_index=False)["金额_美元"].sum()
+    rc = d.groupby(["区", "国"], as_index=False)["金额_美元"].sum()
+    s, t, val, lc = [], [], [], []
+    for _, row in pr.iterrows():
+        s.append(idx[row["省"]]); t.append(idx[row["区"]]); val.append(row["金额_美元"] / 1e8)
+        lc.append(_hex_rgba(reg_colors[row["区"]], 0.30))
+    for _, row in rc.iterrows():
+        s.append(idx[row["区"]]); t.append(idx[row["国"]]); val.append(row["金额_美元"] / 1e8)
+        lc.append(_hex_rgba(reg_colors[row["区"]], 0.30))
+
+    fig = go.Figure(go.Sankey(
+        arrangement="snap",
+        node=dict(label=nodes, color=node_colors, pad=14, thickness=14, line=dict(width=0),
+                  hovertemplate="%{label}：%{value:.2f}亿美元<extra></extra>"),
+        link=dict(source=s, target=t, value=val, color=lc,
+                  hovertemplate="%{source.label} → %{target.label}：%{value:.2f}亿美元<extra></extra>")))
+    fig.update_layout(margin=dict(t=6, l=6, r=6, b=6), height=560,
+                      font=dict(color="#202020", family="Inter, system-ui, sans-serif"),
+                      paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width='stretch')
+
 # ================= 内置数据映射 =================
 DATASETS = {
     "卫生陶瓷": "data/default_6910.parquet",
@@ -556,6 +610,11 @@ if not month_df.empty:
         fig_tm.update_layout(margin=dict(t=6, l=0, r=0, b=0), height=460,
                              coloraxis_showscale=False)
         st.plotly_chart(fig_tm, width='stretch')
+
+    # 出口流向路径（产地省份 → 目的地区域 → 目的地国家）
+    st.subheader(f"{latest}年{plabel}出口流向路径")
+    st.caption("产地省份 → 目的地区域 → 目的地国家；带状宽度随出口额（单位：亿美元）")
+    render_sankey(sp, latest)
 
     # ===== 新增分析维度 =====
     if prev_ok:
