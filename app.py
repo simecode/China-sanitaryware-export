@@ -213,6 +213,8 @@ html, body, [data-testid="stAppViewContainer"] *, [data-testid="stSidebar"] * { 
 [data-testid="stMetric"],[data-testid="metric-container"]{
   background:var(--canvas); border:1px solid var(--mist);
   border-radius:8px; padding:22px 24px;
+  min-height:132px; box-sizing:border-box;
+  display:flex; flex-direction:column; justify-content:center;
 }
 [data-testid="stMetric"] label,[data-testid="metric-container"] label{
   color:var(--slate) !important; font-size:.78rem !important; letter-spacing:.01em;
