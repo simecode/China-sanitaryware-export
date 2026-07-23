@@ -105,23 +105,19 @@ hr{ border-color:var(--mist); }
 }
 [data-baseweb="tag"] span{ color:var(--graphite) !important; }
 
-/* 页脚：Ash 纸带 + 顶部 Ember 细线 */
+/* 页脚：极简，无边框无背景，仅右侧作者信息，位置靠下 */
 .footer{
-  position:relative; background:var(--ash); border-radius:8px;
-  padding:24px 32px; margin-top:64px; color:var(--steel); font-size:.85rem;
-  display:flex; justify-content:space-between; align-items:center; gap:20px;
+  margin-top:140px; padding:0 2px 8px;
+  display:flex; justify-content:flex-end; color:var(--slate); font-size:.78rem;
 }
-.footer::before{
-  content:""; position:absolute; left:0; right:0; top:0; height:3px; background:var(--ember);
-  border-radius:8px 8px 0 0;
-}
-.footer a{ color:var(--ember); text-decoration:none; border-bottom:1px solid var(--ember); }
+.footer .col{ text-align:right; line-height:1.9; }
+.footer a{ color:var(--slate); text-decoration:none; }
+.footer a:hover{ color:var(--ember); }
 
-/* 品牌字标（侧边栏） */
-.brand{ padding:14px 2px 8px; }
-.brand .name{ font-weight:500; font-size:1.15rem; color:var(--graphite); letter-spacing:.06em; }
-.brand .name b{ color:var(--ember); font-weight:500; }
-.brand .sub{ color:var(--slate); font-size:.62rem; letter-spacing:.22em; text-transform:uppercase; margin-top:3px; }
+/* 品牌 LOGO（侧边栏） */
+.brand{ padding:16px 2px 8px; }
+.brand .logo{ display:inline-flex; align-items:center; }
+.brand .logo svg{ display:block; }
 
 /* ===== 移动端适配 ===== */
 @media (max-width: 640px){
@@ -147,16 +143,32 @@ st.markdown("""
 
 # ================= 侧边栏 =================
 with st.sidebar:
-    st.markdown("""
-    <div class="brand">
-      <div class="name">SANITARY<b>WARE</b></div>
-      <div class="sub">Export Observatory</div>
-    </div>
-    """, unsafe_allow_html=True)
+    _logo_svg = None
+    for _p in ("assets/logo.svg",):
+        if os.path.exists(_p):
+            try:
+                with open(_p, "r", encoding="utf-8") as _f:
+                    _logo_svg = _f.read()
+            except Exception:
+                _logo_svg = None
+    if _logo_svg:
+        st.markdown(f'<div class="brand"><div class="logo">{_logo_svg}</div></div>',
+                    unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="brand">
+          <div class="logo">
+            <svg width="42" height="42" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M78 30 C78 18 62 14 47 18 C30 22 27 40 46 47 C66 54 73 60 71 72 C68 85 48 88 32 80"
+                    stroke="#202020" stroke-width="12" stroke-linecap="square"/>
+            </svg>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
     st.markdown("---")
     st.header("引擎配置")
     analysis_mode = st.radio("选择分析维度",
-                             ["同口径(前N月)对比", "月度动态演变", "月度环比走势", "历年全年(完整年份)"])
+                             ["同口径(前N月)对比", "月度动态演变", "历年全年(完整年份)"])
 
     st.markdown("---")
     st.header("AI 接入")
@@ -376,10 +388,9 @@ if not month_df.empty:
             fig.update_yaxes(title_text="金额（亿美元）")
             st.plotly_chart(fig, use_container_width=True)
 
-    elif analysis_mode == "月度环比走势":
+        # —— 环比走势（本月对上月，已并入月度动态）——
         st.subheader(f"{latest} 年月度环比走势（本月对上月）")
-        st.caption("环比 = 本月出口额相对上月的增减；1月环比对上年12月。反映年内实时节奏，不含同比的基数效应。")
-        # 构造 latest 年的连续月度序列（含上年12月，用于1月环比）
+        st.caption("环比 = 本月出口额相对上月的增减；1月环比对上年12月。")
         ly = (month_df_sel[month_df_sel["统计年份"] == latest]
               .groupby("月份", as_index=False)["金额_美元"].sum().sort_values("月份"))
         prev_dec = float(month_df[(month_df["统计年份"] == latest - 1) &
@@ -444,9 +455,6 @@ if not month_df.empty:
             fig1 = px.bar(topb, x="贸易伙伴名称", y="金额_亿", color="所属区域", text_auto=".2f")
             fig1.update_layout(xaxis_tickangle=-30); fig1.update_yaxes(title_text="金额（亿美元）")
             st.plotly_chart(fig1, use_container_width=True)
-            tshow = disp_money(top[["贸易伙伴名称", "所属区域", "金额_美元", "上年同期", "金额同比%"]],
-                               ["金额_美元", "上年同期"])
-            st.dataframe(tshow, use_container_width=True, hide_index=True)
     with col2:
         st.subheader(f"{latest} 年{plabel} 出口省份 TOP10")
         ptop = province_sp[province_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False).head(10)
@@ -457,6 +465,12 @@ if not month_df.empty:
                                hovertemplate="%{y}<br>%{x:.2f} 亿美元<extra></extra>")
             fig2.update_layout(xaxis_title="金额（亿美元）", yaxis_title="")
             st.plotly_chart(fig2, use_container_width=True)
+
+    # 前十大目的地明细（全宽，与上下表格一致）
+    if not top.empty:
+        tshow = disp_money(top[["贸易伙伴名称", "所属区域", "金额_美元", "上年同期", "金额同比%"]],
+                           ["金额_美元", "上年同期"])
+        st.dataframe(tshow, use_container_width=True, hide_index=True)
 
     # 区域
     st.subheader(f"{latest} 年{plabel} 区域分布")
@@ -677,14 +691,9 @@ render_about()
 
 st.markdown("""
 <div class="footer">
-  <div>
-    <span style="font-size:1rem;font-weight:600;color:#202020;">卫浴与泛家居进出口洞察</span><br>
-    <span style="font-size:.78rem;">同比口径：各年取相同月份汇总后逐年同比。</span>
-  </div>
-  <div style="text-align:right;line-height:1.8;">
-    <span style="color:#202020;font-weight:600;">作者 · sze</span><br>
-    <span>交流 · <a href="tel:13760765317">137-6076-5317</a></span><br>
-    <span style="font-size:.75rem;color:#828282;">数据来源：中国海关数据 · 仅供研究参考</span>
+  <div class="col">
+    作者 · sze　交流 · <a href="tel:13760765317">137-6076-5317</a><br>
+    数据来源：中国海关数据 · 仅供研究参考
   </div>
 </div>
 """, unsafe_allow_html=True)
