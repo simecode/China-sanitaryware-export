@@ -367,53 +367,46 @@ if not month_df.empty:
     st.markdown("---")
 
     if analysis_mode == "月度动态演变":
-        st.subheader("月度出口趋势（同口径月份，多年份叠加对比）")
-        md = month_df_sel[month_df_sel["月份"].isin(show_months)].copy()
-        md = md.groupby(["统计年份", "月份"], as_index=False)["金额_美元"].sum()
-        md["年份"] = md["统计年份"].astype(str)
-        md["金额_亿"] = md["金额_美元"] / 1e8
-        if not md.empty:
-            if len(show_months) == 1:
-                mb = md.sort_values("统计年份")
-                fig = px.bar(mb, x="年份", y="金额_亿", text_auto=".2f")
-            else:
-                fig = px.line(md.sort_values(["年份", "月份"]), x="月份", y="金额_亿",
-                              color="年份", markers=True)
-                fig.update_layout(xaxis_type="category", xaxis_tickangle=0)
-            fig.update_yaxes(title_text="金额（亿美元）")
-            st.plotly_chart(fig, use_container_width=True)
-
-        # —— 环比走势（本月对上月，已并入月度动态）——
-        st.subheader(f"{latest} 年月度环比走势（本月对上月）")
-        st.caption("环比 = 本月出口额相对上月的增减；1月环比对上年12月。")
-        ly = (month_df_sel[month_df_sel["统计年份"] == latest]
+        ly = (month_df[month_df["统计年份"] == latest]
               .groupby("月份", as_index=False)["金额_美元"].sum().sort_values("月份"))
-        prev_dec = float(month_df[(month_df["统计年份"] == latest - 1) &
-                                  (month_df["月份"] == 12)]["金额_美元"].sum())
         if not ly.empty:
             ly["金额_亿"] = ly["金额_美元"] / 1e8
+            ly["月标签"] = ly["月份"].astype(int).astype(str) + "月"
+            # 环比：本月对上月（1月对上年12月）
+            prev_dec = float(month_df[(month_df["统计年份"] == latest - 1) &
+                                      (month_df["月份"] == 12)]["金额_美元"].sum())
             base = [prev_dec] + ly["金额_美元"].tolist()[:-1]
-            ly["上月"] = base
             ly["环比%"] = np.where(np.array(base) > 0,
                                   (ly["金额_美元"].values - np.array(base)) / np.array(base) * 100, np.nan).round(1)
-            ly["月标签"] = ly["月份"].astype(int).astype(str) + "月"
             if prev_dec <= 0:
-                ly.loc[ly.index[0], "环比%"] = np.nan  # 无上年12月则1月环比留空
-            fig = px.bar(ly, x="月标签", y="金额_亿", text_auto=".2f",
-                         title=f"{latest} 年各月出口额（亿美元）")
-            fig.update_traces(marker_color="#4d4d4d")
-            fig.update_yaxes(title_text="金额（亿美元）"); fig.update_xaxes(title_text="")
-            # 环比% 折线（次轴）
-            fig.add_scatter(x=ly["月标签"], y=ly["环比%"], name="环比%", yaxis="y2",
-                            mode="lines+markers+text", line=dict(color="#ff682c"),
-                            text=[f"{v:+.1f}%" if pd.notna(v) else "" for v in ly["环比%"]],
-                            textposition="top center", textfont=dict(color="#ff682c"))
-            fig.update_layout(yaxis2=dict(title="环比%", overlaying="y", side="right",
-                                          showgrid=False, zeroline=True, zerolinecolor="#e8e8e8"),
-                              legend=dict(orientation="h", y=1.12))
-            st.plotly_chart(fig, use_container_width=True)
-            tshow = ly[["月标签", "金额_美元", "上月", "环比%"]].copy()
-            st.dataframe(disp_money(tshow, ["金额_美元", "上月"]).rename(columns={"月标签": "月份"}),
+                ly.loc[ly.index[0], "环比%"] = np.nan
+            # 同比：本月对上年同月
+            py = month_df[month_df["统计年份"] == latest - 1].groupby("月份")["金额_美元"].sum()
+            ly["同比%"] = [round((v - py.get(m, np.nan)) / py.get(m, np.nan) * 100, 1)
+                          if py.get(m, 0) > 0 else np.nan
+                          for m, v in zip(ly["月份"], ly["金额_美元"])]
+
+            def _bar_line(metric, color, dash=None):
+                f = px.bar(ly, x="月标签", y="金额_亿", text_auto=".2f")
+                f.update_traces(marker_color="#4d4d4d", name="金额", showlegend=True)
+                f.update_yaxes(title_text="金额（亿美元）"); f.update_xaxes(title_text="")
+                f.add_scatter(x=ly["月标签"], y=ly[metric], name=metric, yaxis="y2",
+                              mode="lines+markers+text", line=dict(color=color, width=2, dash=dash),
+                              text=[f"{v:+.1f}%" if pd.notna(v) else "" for v in ly[metric]],
+                              textposition="top center", textfont=dict(color=color))
+                f.update_layout(yaxis2=dict(title=metric, overlaying="y", side="right",
+                                            showgrid=False, zeroline=True, zerolinecolor="#e8e8e8"),
+                                legend=dict(orientation="h", y=1.14))
+                return f
+
+            st.subheader(f"{latest} 年月度出口额与同比")
+            st.plotly_chart(_bar_line("同比%", "#ff682c"), use_container_width=True)
+
+            st.subheader(f"{latest} 年月度出口额与环比")
+            st.plotly_chart(_bar_line("环比%", "#816729"), use_container_width=True)
+
+            tshow = ly[["月标签", "金额_美元", "同比%", "环比%"]].copy()
+            st.dataframe(disp_money(tshow, ["金额_美元"]).rename(columns={"月标签": "月份"}),
                          use_container_width=True, hide_index=True)
             # 季度环比（数据满足时）
             mv = dict(zip(ly["月份"].astype(int), ly["金额_美元"]))
