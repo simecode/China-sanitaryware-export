@@ -21,7 +21,9 @@ def _load_logo_b64():
     return None
 
 LOGO_B64 = _load_logo_b64()
-LOGO_PATH = next((p for p in ("assets/logo_mark.png", "assets/logo.png") if os.path.exists(p)), None)
+# favicon / 分享缩略图：优先用方形白底图标（透明/竖版在微信里会变灰、显得过大）
+LOGO_PATH = next((p for p in ("assets/logo_icon.png", "assets/logo_mark.png", "assets/logo.png")
+                  if os.path.exists(p)), None)
 
 # —— 图表统一走 Ventriloc 编辑风：白底 + 墨黑/暖灰 + 橙/黄铜点睛 ——
 # 近乎单色（graphite/steel/slate 灰阶）+ Ember 橙 + Brass 黄铜为暖色点缀
@@ -406,151 +408,7 @@ def add_yi(df, src="金额_美元", dst="金额_亿"):
     return d
 
 
-# ================= 主体 =================
-if not month_df.empty:
-    all_years = sorted(int(y) for y in month_df["统计年份"].dropna().unique())
-    with st.sidebar:
-        st.markdown("---")
-        st.header("年份筛选")
-        selected_years = st.multiselect(
-            "年份", options=all_years, default=all_years, label_visibility="collapsed")
-    if not selected_years:
-        selected_years = all_years
-
-    # —— 基准年份/月份均由当前选中的年份动态决定 ——
-    month_df_sel = month_df[month_df["统计年份"].isin(selected_years)]
-    latest, months, ok_years, sp = same_period_pool(month_df_sel)
-    prev_year = latest - 1
-    prev_ok = prev_year in ok_years
-
-    # 月份筛选：放侧边栏，影响全页所有指标/图表
-    with st.sidebar:
-        st.markdown("---")
-        st.header("月份筛选")
-        show_months = st.multiselect(
-            "月份", options=months, default=months, label_visibility="collapsed")
-    if not show_months:
-        show_months = months
-
-    # 用 show_months 重新过滤 sp，让 KPI / TOP10 / 区域等全部联动
-    sp = sp[sp["月份"].isin(show_months)].copy()
-    n = len(show_months)
-    show_months_sorted = sorted(show_months)
-    mlabel = "、".join(str(m) for m in show_months_sorted) + "月"
-    # 连续的前N月用"前N月"，否则直接列出月份
-    is_prefix = show_months_sorted == list(range(1, n + 1))
-    plabel = f"前{n}月" if is_prefix else mlabel
-
-    if not prev_ok:
-        st.caption(f"缺 {prev_year}年月度数据，同比暂无法计算。")
-
-    annual_sp = yoy_table(sp, [])
-    partner_sp = yoy_table(sp, ["贸易伙伴名称", "所属区域"])
-    province_sp = yoy_table(sp, ["注册地名称"])
-    region_sp = yoy_table(sp, ["所属区域"])
-
-    cur_total = float(annual_sp.loc[annual_sp["统计年份"] == latest, "金额_美元"].sum()) if not annual_sp.empty else 0.0
-    cur_yoy = annual_sp.loc[annual_sp["统计年份"] == latest, "金额同比%"]
-    cur_yoy = cur_yoy.iloc[0] if len(cur_yoy) and pd.notna(cur_yoy.iloc[0]) else None
-    prev_total = float(annual_sp.loc[annual_sp["统计年份"] == prev_year, "金额_美元"].sum()) if prev_ok else None
-
-    # 最新月环比（本月对上月；1月对上年12月）
-    _ly = month_df[month_df["统计年份"] == latest].groupby("月份")["金额_美元"].sum()
-    _lm = max(show_months) if show_months else (int(_ly.index.max()) if len(_ly) else None)
-    mom_label, mom_val, mom_delta = "最新月环比", "—", None
-    if _lm is not None and _lm in _ly.index:
-        if _lm == 1:
-            _pv = float(month_df[(month_df["统计年份"] == latest - 1) & (month_df["月份"] == 12)]["金额_美元"].sum())
-        else:
-            _pv = float(_ly.get(_lm - 1, 0))
-        _cv = float(_ly[_lm])
-        if _pv > 0:
-            mom_label = f"{int(_lm)}月环比"
-            mom_val = fmt_money(_cv)
-            mom_delta = f"{(_cv - _pv) / _pv * 100:+.1f}%"
-
-    st.markdown(f"### {latest}年{plabel}全球市场贸易格局透视")
-    ca, cb, cc = st.columns(3)
-    ca.metric(f"{latest}年{plabel}出口总额", fmt_money(cur_total),
-              delta=(f"{cur_yoy:+.2f}%" if cur_yoy is not None else None))
-    cb.metric(f"{prev_year}年同期", fmt_money(prev_total) if prev_total is not None else "无月度数据")
-    cc.metric(mom_label, mom_val, delta=mom_delta)
-
-    # 出口流向世界地图（销往哪里）
-    st.subheader("出口流向（销往哪里）")
-    st.caption("线条由中国指向各目的地，粗细/圆点大小随出口额；仅显示主要贸易伙伴")
-    render_flow_map(sp, latest)
-
-    st.markdown("---")
-
-    if analysis_mode == "月度动态演变":
-        ly = (month_df[month_df["统计年份"] == latest]
-              .groupby("月份", as_index=False)["金额_美元"].sum().sort_values("月份"))
-        if not ly.empty:
-            ly["金额_亿"] = ly["金额_美元"] / 1e8
-            ly["月标签"] = ly["月份"].astype(int).astype(str) + "月"
-            # 环比：本月对上月（1月对上年12月）
-            prev_dec = float(month_df[(month_df["统计年份"] == latest - 1) &
-                                      (month_df["月份"] == 12)]["金额_美元"].sum())
-            base = [prev_dec] + ly["金额_美元"].tolist()[:-1]
-            ly["环比%"] = np.where(np.array(base) > 0,
-                                  (ly["金额_美元"].values - np.array(base)) / np.array(base) * 100, np.nan).round(1)
-            if prev_dec <= 0:
-                ly.loc[ly.index[0], "环比%"] = np.nan
-            # 同比：本月对上年同月
-            py = month_df[month_df["统计年份"] == latest - 1].groupby("月份")["金额_美元"].sum()
-            ly["同比%"] = [round((v - py.get(m, np.nan)) / py.get(m, np.nan) * 100, 1)
-                          if py.get(m, 0) > 0 else np.nan
-                          for m, v in zip(ly["月份"], ly["金额_美元"])]
-
-            def _bar_line(metric, color, dash=None):
-                f = px.bar(ly, x="月标签", y="金额_亿", text_auto=".2f")
-                f.update_traces(marker_color="#4d4d4d", name="金额", showlegend=True)
-                f.update_yaxes(title_text="金额（亿美元）"); f.update_xaxes(title_text="")
-                f.add_scatter(x=ly["月标签"], y=ly[metric], name=metric, yaxis="y2",
-                              mode="lines+markers+text", line=dict(color=color, width=2, dash=dash),
-                              text=[f"{v:+.1f}%" if pd.notna(v) else "" for v in ly[metric]],
-                              textposition="top center", textfont=dict(color=color))
-                f.update_layout(yaxis2=dict(title=metric, overlaying="y", side="right",
-                                            showgrid=False, zeroline=True, zerolinecolor="#e8e8e8"),
-                                legend=dict(orientation="h", y=1.14))
-                return f
-
-            st.subheader(f"{latest}年月度出口额与同比")
-            st.plotly_chart(_bar_line("同比%", "#ff682c"), width='stretch')
-
-            st.subheader(f"{latest}年月度出口额与环比")
-            st.plotly_chart(_bar_line("环比%", "#816729"), width='stretch')
-
-            tshow = ly[["月标签", "金额_美元", "同比%", "环比%"]].copy()
-            st.dataframe(disp_money(tshow, ["金额_美元"]).rename(columns={"月标签": "月份"}),
-                         width='stretch', hide_index=True)
-            # 季度环比（数据满足时）
-            mv = dict(zip(ly["月份"].astype(int), ly["金额_美元"]))
-            if all(q in mv for q in [1, 2, 3]) and all(q in mv for q in [4, 5, 6]):
-                q1 = mv[1] + mv[2] + mv[3]; q2 = mv[4] + mv[5] + mv[6]
-                st.markdown(f"**季度环比**：二季度 {q2/1e8:.2f}亿美元 vs 一季度 {q1/1e8:.2f}亿美元，"
-                            f"环比 **{(q2-q1)/q1*100:+.1f}%**")
-
-    else:
-        st.subheader(f"历年{plabel}出口额")
-        st.caption("单位：亿美元")
-        if not annual_sp.empty:
-            bar = annual_sp.copy()
-            bar["年份"] = bar["统计年份"].astype(str)
-            bar["金额_亿"] = bar["金额_美元"] / 1e8
-            fig0 = px.area(bar.sort_values("统计年份"), x="年份", y="金额_亿", markers=True)
-            fig0.update_traces(line_color="#ff682c", line_width=2,
-                               fillcolor="rgba(255,104,44,0.10)",
-                               marker=dict(size=6, color="#ff682c"),
-                               hovertemplate="%{x}<br>%{y:.2f}亿美元<extra></extra>")
-            fig0.update_yaxes(title_text="金额（亿美元）"); fig0.update_xaxes(title_text="")
-            st.plotly_chart(fig0, width='stretch')
-            show = disp_money(annual_sp[["统计年份", "金额_美元", "上年同期", "金额同比%"]],
-                              ["金额_美元", "上年同期"])
-            show.columns = ["年份", f"{plabel}出口额（亿美元）", "上年同期（亿美元）", "同比%"]
-            st.dataframe(show, width='stretch', hide_index=True)
-
+def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_year, prev_ok, plabel, cur_total):
     col1, col2 = st.columns(2)
     with col1:
         st.subheader(f"{latest}年{plabel}前十大出口目的地")
@@ -716,6 +574,154 @@ if not month_df.empty:
                 ft.columns = ["贸易伙伴名称","所属区域","今年出口额（亿美元）","去年出口额（亿美元）","同比%"]
                 st.dataframe(ft, width='stretch', hide_index=True)
 
+
+# ================= 主体 =================
+if not month_df.empty:
+    all_years = sorted(int(y) for y in month_df["统计年份"].dropna().unique())
+    with st.sidebar:
+        st.markdown("---")
+        st.header("年份筛选")
+        selected_years = st.multiselect(
+            "年份", options=all_years, default=all_years, label_visibility="collapsed")
+    if not selected_years:
+        selected_years = all_years
+
+    # —— 基准年份/月份均由当前选中的年份动态决定 ——
+    month_df_sel = month_df[month_df["统计年份"].isin(selected_years)]
+    latest, months, ok_years, sp = same_period_pool(month_df_sel)
+    prev_year = latest - 1
+    prev_ok = prev_year in ok_years
+
+    # 月份筛选：放侧边栏，影响全页所有指标/图表
+    with st.sidebar:
+        st.markdown("---")
+        st.header("月份筛选")
+        show_months = st.multiselect(
+            "月份", options=months, default=months, label_visibility="collapsed")
+    if not show_months:
+        show_months = months
+
+    # 用 show_months 重新过滤 sp，让 KPI / TOP10 / 区域等全部联动
+    sp = sp[sp["月份"].isin(show_months)].copy()
+    n = len(show_months)
+    show_months_sorted = sorted(show_months)
+    mlabel = "、".join(str(m) for m in show_months_sorted) + "月"
+    # 连续的前N月用"前N月"，否则直接列出月份
+    is_prefix = show_months_sorted == list(range(1, n + 1))
+    plabel = f"前{n}月" if is_prefix else mlabel
+
+    if not prev_ok:
+        st.caption(f"缺 {prev_year}年月度数据，同比暂无法计算。")
+
+    annual_sp = yoy_table(sp, [])
+    partner_sp = yoy_table(sp, ["贸易伙伴名称", "所属区域"])
+    province_sp = yoy_table(sp, ["注册地名称"])
+    region_sp = yoy_table(sp, ["所属区域"])
+
+    cur_total = float(annual_sp.loc[annual_sp["统计年份"] == latest, "金额_美元"].sum()) if not annual_sp.empty else 0.0
+    cur_yoy = annual_sp.loc[annual_sp["统计年份"] == latest, "金额同比%"]
+    cur_yoy = cur_yoy.iloc[0] if len(cur_yoy) and pd.notna(cur_yoy.iloc[0]) else None
+    prev_total = float(annual_sp.loc[annual_sp["统计年份"] == prev_year, "金额_美元"].sum()) if prev_ok else None
+
+    # 最新月环比（本月对上月；1月对上年12月）
+    _ly = month_df[month_df["统计年份"] == latest].groupby("月份")["金额_美元"].sum()
+    _lm = max(show_months) if show_months else (int(_ly.index.max()) if len(_ly) else None)
+    mom_label, mom_val, mom_delta = "最新月环比", "—", None
+    if _lm is not None and _lm in _ly.index:
+        if _lm == 1:
+            _pv = float(month_df[(month_df["统计年份"] == latest - 1) & (month_df["月份"] == 12)]["金额_美元"].sum())
+        else:
+            _pv = float(_ly.get(_lm - 1, 0))
+        _cv = float(_ly[_lm])
+        if _pv > 0:
+            mom_label = f"{int(_lm)}月环比"
+            mom_val = fmt_money(_cv)
+            mom_delta = f"{(_cv - _pv) / _pv * 100:+.1f}%"
+
+    st.markdown(f"### {latest}年{plabel}全球市场贸易格局透视")
+    ca, cb, cc = st.columns(3)
+    ca.metric(f"{latest}年{plabel}出口总额", fmt_money(cur_total),
+              delta=(f"{cur_yoy:+.2f}%" if cur_yoy is not None else None))
+    cb.metric(f"{prev_year}年同期", fmt_money(prev_total) if prev_total is not None else "无月度数据")
+    cc.metric(mom_label, mom_val, delta=mom_delta)
+
+    # 出口流向世界地图（销往哪里）
+    st.subheader("出口流向（销往哪里）")
+    st.caption("线条由中国指向各目的地，粗细/圆点大小随出口额；仅显示主要贸易伙伴")
+    render_flow_map(sp, latest)
+
+    st.markdown("---")
+
+    if analysis_mode == "月度动态演变":
+        ly = (month_df[month_df["统计年份"] == latest]
+              .groupby("月份", as_index=False)["金额_美元"].sum().sort_values("月份"))
+        if not ly.empty:
+            ly["金额_亿"] = ly["金额_美元"] / 1e8
+            ly["月标签"] = ly["月份"].astype(int).astype(str) + "月"
+            # 环比：本月对上月（1月对上年12月）
+            prev_dec = float(month_df[(month_df["统计年份"] == latest - 1) &
+                                      (month_df["月份"] == 12)]["金额_美元"].sum())
+            base = [prev_dec] + ly["金额_美元"].tolist()[:-1]
+            ly["环比%"] = np.where(np.array(base) > 0,
+                                  (ly["金额_美元"].values - np.array(base)) / np.array(base) * 100, np.nan).round(1)
+            if prev_dec <= 0:
+                ly.loc[ly.index[0], "环比%"] = np.nan
+            # 同比：本月对上年同月
+            py = month_df[month_df["统计年份"] == latest - 1].groupby("月份")["金额_美元"].sum()
+            ly["同比%"] = [round((v - py.get(m, np.nan)) / py.get(m, np.nan) * 100, 1)
+                          if py.get(m, 0) > 0 else np.nan
+                          for m, v in zip(ly["月份"], ly["金额_美元"])]
+
+            def _bar_line(metric, color, dash=None):
+                f = px.bar(ly, x="月标签", y="金额_亿", text_auto=".2f")
+                f.update_traces(marker_color="#4d4d4d", name="金额", showlegend=True)
+                f.update_yaxes(title_text="金额（亿美元）"); f.update_xaxes(title_text="")
+                f.add_scatter(x=ly["月标签"], y=ly[metric], name=metric, yaxis="y2",
+                              mode="lines+markers+text", line=dict(color=color, width=2, dash=dash),
+                              text=[f"{v:+.1f}%" if pd.notna(v) else "" for v in ly[metric]],
+                              textposition="top center", textfont=dict(color=color))
+                f.update_layout(yaxis2=dict(title=metric, overlaying="y", side="right",
+                                            showgrid=False, zeroline=True, zerolinecolor="#e8e8e8"),
+                                legend=dict(orientation="h", y=1.14))
+                return f
+
+            st.subheader(f"{latest}年月度出口额与同比")
+            st.plotly_chart(_bar_line("同比%", "#ff682c"), width='stretch')
+
+            st.subheader(f"{latest}年月度出口额与环比")
+            st.plotly_chart(_bar_line("环比%", "#816729"), width='stretch')
+
+            tshow = ly[["月标签", "金额_美元", "同比%", "环比%"]].copy()
+            st.dataframe(disp_money(tshow, ["金额_美元"]).rename(columns={"月标签": "月份"}),
+                         width='stretch', hide_index=True)
+            # 季度环比（数据满足时）
+            mv = dict(zip(ly["月份"].astype(int), ly["金额_美元"]))
+            if all(q in mv for q in [1, 2, 3]) and all(q in mv for q in [4, 5, 6]):
+                q1 = mv[1] + mv[2] + mv[3]; q2 = mv[4] + mv[5] + mv[6]
+                st.markdown(f"**季度环比**：二季度 {q2/1e8:.2f}亿美元 vs 一季度 {q1/1e8:.2f}亿美元，"
+                            f"环比 **{(q2-q1)/q1*100:+.1f}%**")
+
+    else:
+        st.subheader(f"历年{plabel}出口额")
+        st.caption("单位：亿美元")
+        if not annual_sp.empty:
+            bar = annual_sp.copy()
+            bar["年份"] = bar["统计年份"].astype(str)
+            bar["金额_亿"] = bar["金额_美元"] / 1e8
+            fig0 = px.area(bar.sort_values("统计年份"), x="年份", y="金额_亿", markers=True)
+            fig0.update_traces(line_color="#ff682c", line_width=2,
+                               fillcolor="rgba(255,104,44,0.10)",
+                               marker=dict(size=6, color="#ff682c"),
+                               hovertemplate="%{x}<br>%{y:.2f}亿美元<extra></extra>")
+            fig0.update_yaxes(title_text="金额（亿美元）"); fig0.update_xaxes(title_text="")
+            st.plotly_chart(fig0, width='stretch')
+            show = disp_money(annual_sp[["统计年份", "金额_美元", "上年同期", "金额同比%"]],
+                              ["金额_美元", "上年同期"])
+            show.columns = ["年份", f"{plabel}出口额（亿美元）", "上年同期（亿美元）", "同比%"]
+            st.dataframe(show, width='stretch', hide_index=True)
+
+    render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_year, prev_ok, plabel, cur_total)
+
     st.markdown("---")
 
     # 历年全年：优先用月度数据里『满12个月』的年份汇总出真实全年总额，
@@ -757,43 +763,64 @@ if not month_df.empty:
 
 # ---------- 没有月度数据：只能快照（如水龙头只有单一年份）----------
 else:
-    st.info(f"{selected_dataset} 无月度数据，以下为最新年度快照。")
-    years = sorted(int(y) for y in year_df["统计年份"].dropna().unique())
-    st.caption(f"可用年份：{years}")
-    latest = years[-1] if years else None
-    if latest is not None:
-        snap = year_df[year_df["统计年份"] == latest]
-        st.markdown(f"### {latest}年市场快照")
-        ca, cb = st.columns(2)
-        ca.metric(f"{latest}年出口总额", fmt_money(snap['金额_美元'].sum()))
-        cb.metric("活跃目的地数量", int(snap["贸易伙伴名称"].nunique()))
+    # 年度数据（无月度，如龙头/浴缸等）：走完整年度大屏
+    all_years = sorted(int(y) for y in year_df["统计年份"].dropna().unique())
+    if not all_years:
+        st.info("该数据集无有效年份数据。")
+        st.stop()
+    with st.sidebar:
         st.markdown("---")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("前十大出口目的地")
-            t = snap.groupby(["贸易伙伴名称", "所属区域"], as_index=False)["金额_美元"].sum() \
-                    .sort_values("金额_美元", ascending=False).head(10)
-            t = add_yi(t)
-            fig_t = px.bar(t, x="贸易伙伴名称", y="金额_亿", color="所属区域", text_auto=".2f")
-            fig_t.update_yaxes(title_text="金额（亿美元）")
-            st.plotly_chart(fig_t, width='stretch')
-        with c2:
-            st.subheader("出口省份 TOP10")
-            p = snap.groupby("注册地名称", as_index=False)["金额_美元"].sum() \
-                    .sort_values("金额_美元", ascending=False).head(10)
-            p = add_yi(p)
-            fig_p = px.pie(p, names="注册地名称", values="金额_亿", hole=0.4)
-            fig_p.update_traces(hovertemplate="%{label}<br>%{value:.2f}亿美元 (%{percent})")
-            st.plotly_chart(fig_p, width='stretch')
-        # 单价（若有重量）
-        if (snap["数量_统一"] > 0).any():
-            st.subheader("高附加值市场TOP10")
-            u = snap.groupby(["贸易伙伴名称", "所属区域"], as_index=False).agg(
-                {"金额_美元": "sum", "数量_统一": "sum"})
-            u["出口单价（美元/单位）"] = np.where(u["数量_统一"] > 0,
-                                           (u["金额_美元"] / u["数量_统一"]).round(4), np.nan)
-            u = u[u["金额_美元"] > 0].sort_values("出口单价（美元/单位）", ascending=False).head(10)
-            st.dataframe(u, width='stretch', hide_index=True)
+        st.header("年份筛选")
+        selected_years = st.multiselect("年份", options=all_years, default=all_years,
+                                        label_visibility="collapsed")
+    if not selected_years:
+        selected_years = all_years
+
+    sp = year_df[year_df["统计年份"].isin(selected_years)].copy()
+    latest = int(sp["统计年份"].max())
+    prev_year = latest - 1
+    prev_ok = prev_year in selected_years
+    plabel = "全年"
+
+    annual_a = yoy_table(sp, [])
+    partner_sp = yoy_table(sp, ["贸易伙伴名称", "所属区域"])
+    province_sp = yoy_table(sp, ["注册地名称"])
+    region_sp = yoy_table(sp, ["所属区域"])
+
+    cur_total = float(annual_a.loc[annual_a["统计年份"] == latest, "金额_美元"].sum()) if not annual_a.empty else 0.0
+    cur_yoy = annual_a.loc[annual_a["统计年份"] == latest, "金额同比%"]
+    cur_yoy = cur_yoy.iloc[0] if len(cur_yoy) and pd.notna(cur_yoy.iloc[0]) else None
+    prev_total = float(annual_a.loc[annual_a["统计年份"] == prev_year, "金额_美元"].sum()) if prev_ok else None
+
+    st.markdown(f"### {latest}年全年全球市场贸易格局透视")
+    ca, cb, cc = st.columns(3)
+    ca.metric(f"{latest}年出口总额", fmt_money(cur_total),
+              delta=(f"{cur_yoy:+.2f}%" if cur_yoy is not None else None))
+    cb.metric(f"{prev_year}年同期", fmt_money(prev_total) if prev_total is not None else "无数据")
+    cc.metric("活跃目的地数量", int(sp.loc[sp["统计年份"] == latest, "贸易伙伴名称"].nunique()))
+
+    st.subheader("出口流向（销往哪里）")
+    st.caption("线条由中国指向各目的地，粗细/圆点大小随出口额；仅显示主要贸易伙伴")
+    render_flow_map(sp, latest)
+
+    st.markdown("---")
+
+    st.subheader("历年全年出口额")
+    st.caption("单位：亿美元")
+    if not annual_a.empty:
+        bar = annual_a.copy(); bar["年份"] = bar["统计年份"].astype(str); bar["金额_亿"] = bar["金额_美元"] / 1e8
+        fig0 = px.area(bar.sort_values("统计年份"), x="年份", y="金额_亿", markers=True)
+        fig0.update_traces(line_color="#ff682c", line_width=2, fillcolor="rgba(255,104,44,0.10)",
+                           marker=dict(size=6, color="#ff682c"),
+                           hovertemplate="%{x}<br>%{y:.2f}亿美元<extra></extra>")
+        fig0.update_yaxes(title_text="金额（亿美元）"); fig0.update_xaxes(title_text="")
+        st.plotly_chart(fig0, width='stretch')
+        show = disp_money(annual_a[["统计年份", "金额_美元", "上年同期", "金额同比%"]], ["金额_美元", "上年同期"])
+        show.columns = ["年份", "全年出口额（亿美元）", "上年同期（亿美元）", "同比%"]
+        st.dataframe(show, width='stretch', hide_index=True)
+
+    render_period_analysis(sp, partner_sp, province_sp, region_sp,
+                           latest, prev_year, prev_ok, plabel, cur_total)
 
 st.markdown("""
 <div class="footer">
