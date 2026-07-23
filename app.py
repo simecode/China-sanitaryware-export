@@ -44,8 +44,8 @@ MAPPING_FILE_NAME = "区域映射表.xlsx"
 
 # ================= 内置数据映射 =================
 DATASETS = {
-    "6910 (陶瓷卫浴)": "data/default_6910.parquet",
-    "水龙头/龙头": "data/default_faucet.parquet",
+    "卫生陶瓷": "data/default_6910.parquet",
+    "龙头": "data/default_faucet.parquet",
 }
 
 st.set_page_config(page_title="贸易可视化地图", layout="wide",
@@ -177,9 +177,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("数据来源")
-    use_builtin = st.checkbox("使用内置默认数据（无需上传）", value=True)
-    selected_dataset = (st.selectbox("选择内置数据集", options=list(DATASETS.keys()), index=0)
-                        if use_builtin else None)
+    use_builtin = True
+    selected_dataset = st.selectbox("选择数据集", options=list(DATASETS.keys()), index=0)
 
 
 @st.cache_data(ttl=3600)
