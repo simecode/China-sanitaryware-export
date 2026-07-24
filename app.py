@@ -232,7 +232,11 @@ hr{ border-color:var(--mist); }
 [data-testid="stDataFrame"]{
   border-radius:8px; overflow:hidden; border:1px solid var(--mist); max-width:100%; overflow-x:auto;
 }
-[data-testid="stMain"] .stCaption, [data-testid="stCaptionContainer"]{ color:var(--slate); }
+/* 备注/说明文字：统一灰色、小字 */
+[data-testid="stMain"] .stCaption, [data-testid="stCaptionContainer"],
+[data-testid="stCaptionContainer"] p, [data-testid="stMain"] .stCaption p{
+  color:var(--slate) !important; font-size:.72rem !important; line-height:1.5 !important;
+}
 
 /* 多选筛选标签：Ash 胶囊、墨字 */
 [data-baseweb="tag"]{
@@ -505,10 +509,8 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
     # 出口单价分析（仅在有千克数量的数据集显示；陶瓷 6910 无数量会自动跳过）
     if sp["数量_统一"].sum() > 0:
         st.markdown("---")
-        st.subheader(f"{latest}年{plabel}出口单价（美元/千克 · 价值密度）")
-        st.caption("单价 = 金额 ÷ 千克，衡量『每公斤货值（价值密度）』，非每件售价——海关只报重量不报件数，"
-                   "故无法算每件单价。此处对比同品类下各目的地买得贵/便宜；钢铁类因材质重，"
-                   "每千克单价天然偏低，不代表产品便宜。仅统计有真实体量的市场。")
+        st.subheader(f"{latest}年{plabel}出口单价（美元/千克）")
+        st.caption("统一提取海关千克单位进行统计分析")
         up = (sp[sp["统计年份"] == latest]
               .groupby(["贸易伙伴名称", "所属区域"], as_index=False)
               .agg({"金额_美元": "sum", "数量_统一": "sum"}))
@@ -521,7 +523,7 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
             avg_price = up["金额_美元"].sum() / up["数量_统一"].sum()
             cu1, cu2 = st.columns([3, 2])
             with cu1:
-                st.markdown("**单价 × 出口额**（气泡=出口额；越靠上=价值密度越高）")
+                st.markdown("**单价 × 出口额**（气泡=出口额）")
                 figu = px.scatter(ups, x="出口额_亿", y="单价", size="出口额_亿",
                                   color="所属区域", hover_name="贸易伙伴名称", size_max=40,
                                   hover_data={"出口额_亿": ":.2f", "单价": ":.2f"})
