@@ -120,7 +120,31 @@ DATASET_MATCHERS = {
     "水龙头":  (lambda b: "faucet" in b.lower() or "水龙头" in b,                "faucet"),
     # 塑料卫浴：合并 39221000(浴缸/淋浴盘/洗涤槽/脸盆) + 39222000(坐便器盖) + 39229000(其他)
     "塑料卫浴": (lambda b: b.startswith(("39221000", "39222000", "39229000")), "plastic"),
+    # 钢制浴缸：73242100(搪瓷铸铁浴缸) + 73242900(其他钢铁浴缸)
+    "钢制浴缸": (lambda b: b.startswith(("73242100", "73242900")),             "steel_bath"),
+    # 其他钢制卫浴：73241000(不锈钢水槽) + 73249000(其他钢铁卫生器具及零件)
+    "其他钢制卫浴": (lambda b: b.startswith(("73241000", "73249000")),          "steel_other"),
 }
+
+
+def unified_kg(df):
+    """把数量统一到『千克』：优先取计量单位为千克的那一列（第一/第二数量），
+       84818090 这类第一单位是『套』的会自动改用第二数量（千克）；
+       再兜底『总重量（千克）』『净重（千克）』；都没有则记 0。
+       这样各 HS 码可比，单价 = 金额/千克 = 美元/千克。"""
+    kg = pd.Series(np.nan, index=df.index, dtype="float")
+    def c(name): return df[name] if name in df.columns else None
+    for qcol, ucol in [("第一数量", "第一计量单位"), ("第二数量", "第二计量单位")]:
+        q, u = c(qcol), c(ucol)
+        if q is not None and u is not None:
+            m = u.astype(str).str.contains("千克", na=False) & kg.isna()
+            kg = kg.where(~m, pd.to_numeric(q, errors="coerce"))
+    for wcol in ["总重量（千克）", "净重（千克）"]:
+        w = c(wcol)
+        if w is not None:
+            need = kg.isna()
+            kg = kg.where(~need, pd.to_numeric(w, errors="coerce"))
+    return kg.fillna(0.0).clip(lower=0)
 
 
 def process_files(dataset_name):
@@ -141,6 +165,8 @@ def process_files(dataset_name):
             df = pd.read_excel(full)
             if df.empty:
                 continue
+            # 先按原始列算出统一到千克的数量（在改名前，列名还是第一/第二数量）
+            df["__kg__"] = unified_kg(df)
             cmap = match_columns(list(df.columns), FIELD_SPECS)
 
             # —— 月份 + 年份：有『数据年月』就以它为准（逐行取年/月），
@@ -173,10 +199,8 @@ def process_files(dataset_name):
             df["数据粒度"] = granularity
             df["贸易类型"] = "出口"
 
-            if "数量_统一" not in df.columns:
-                df["数量_统一"] = 0.0
-            else:
-                df["数量_统一"] = pd.to_numeric(df["数量_统一"], errors="coerce").fillna(0.0)
+            # 数量统一用千克口径（__kg__ 在读文件时已按计量单位算好）
+            df["数量_统一"] = pd.to_numeric(df.get("__kg__", 0.0), errors="coerce").fillna(0.0)
 
             df["注册地名称"] = (df["注册地名称"].astype(str).str.strip()
                               if "注册地名称" in df.columns else "未知")
@@ -242,4 +266,6 @@ def process_files(dataset_name):
 process_files("6910")
 process_files("水龙头")
 process_files("塑料卫浴")
+process_files("钢制浴缸")
+process_files("其他钢制卫浴")
 print("\n✅ 全部完成。提醒：要做『前N月同比』，每个对比年份都需有对应的月度文件(含数据年月)。")

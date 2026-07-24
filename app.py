@@ -157,6 +157,8 @@ DATASETS = {
     "卫生陶瓷": "data/default_6910.parquet",
     "龙头": "data/default_faucet.parquet",
     "塑料卫浴": "data/default_plastic.parquet",
+    "钢制浴缸": "data/default_steel_bath.parquet",
+    "其他钢制卫浴": "data/default_steel_other.parquet",
 }
 
 st.set_page_config(page_title="贸易可视化地图", layout="wide",
@@ -499,6 +501,42 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
     st.subheader(f"{latest}年{plabel}出口流向路径")
     st.caption("产地省份 → 目的地区域 → 目的地国家；带状宽度随出口额（单位：亿美元）")
     render_sankey(sp, latest)
+
+    # 出口单价分析（仅在有千克数量的数据集显示；陶瓷 6910 无数量会自动跳过）
+    if sp["数量_统一"].sum() > 0:
+        st.markdown("---")
+        st.subheader(f"{latest}年{plabel}出口单价（美元/千克 · 价值密度）")
+        st.caption("单价 = 金额 ÷ 千克，衡量『每公斤货值（价值密度）』，非每件售价——海关只报重量不报件数，"
+                   "故无法算每件单价。此处对比同品类下各目的地买得贵/便宜；钢铁类因材质重，"
+                   "每千克单价天然偏低，不代表产品便宜。仅统计有真实体量的市场。")
+        up = (sp[sp["统计年份"] == latest]
+              .groupby(["贸易伙伴名称", "所属区域"], as_index=False)
+              .agg({"金额_美元": "sum", "数量_统一": "sum"}))
+        up = up[(up["数量_统一"] > 0) & (up["金额_美元"] > 0)].copy()
+        if not up.empty:
+            up["单价"] = (up["金额_美元"] / up["数量_统一"]).round(2)
+            up["出口额_亿"] = (up["金额_美元"] / 1e8).round(3)
+            floor = max(1e6, 0.003 * up["金额_美元"].sum())
+            ups = up[up["金额_美元"] >= floor]
+            avg_price = up["金额_美元"].sum() / up["数量_统一"].sum()
+            cu1, cu2 = st.columns([3, 2])
+            with cu1:
+                st.markdown("**单价 × 出口额**（气泡=出口额；越靠上=价值密度越高）")
+                figu = px.scatter(ups, x="出口额_亿", y="单价", size="出口额_亿",
+                                  color="所属区域", hover_name="贸易伙伴名称", size_max=40,
+                                  hover_data={"出口额_亿": ":.2f", "单价": ":.2f"})
+                figu.add_hline(y=avg_price, line_dash="dot", line_color="#828282",
+                               annotation_text=f"整体均价 {avg_price:.2f}", annotation_position="top left")
+                figu.update_layout(xaxis_title="出口额（亿美元）", yaxis_title="单价（美元/千克）")
+                st.plotly_chart(figu, width='stretch')
+            with cu2:
+                st.markdown("**高价值密度市场 TOP12**")
+                topu = ups.sort_values("单价", ascending=False).head(12).sort_values("单价")
+                figu2 = px.bar(topu, x="单价", y="贸易伙伴名称", orientation="h", text_auto=".2f")
+                figu2.update_traces(marker_color="#816729",
+                                    hovertemplate="%{y}<br>%{x:.2f} 美元/千克<extra></extra>")
+                figu2.update_layout(xaxis_title="单价（美元/千克）", yaxis_title="")
+                st.plotly_chart(figu2, width='stretch')
 
     # ===== 新增分析维度 =====
     if prev_ok:
