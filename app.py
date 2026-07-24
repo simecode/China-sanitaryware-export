@@ -160,6 +160,7 @@ DATASETS = {
     "钢制浴缸": "data/default_steel_bath.parquet",
     "其他钢制卫浴": "data/default_steel_other.parquet",
 }
+HOME_KEY = "🏠 全品类总览"
 
 st.set_page_config(page_title="贸易可视化地图", layout="wide",
                    page_icon=(LOGO_PATH or "📊"))
@@ -302,7 +303,8 @@ with st.sidebar:
     st.markdown("---")
     st.header("数据来源")
     use_builtin = True
-    selected_dataset = st.selectbox("选择数据集", options=list(DATASETS.keys()), index=0)
+    selected_dataset = st.selectbox("选择数据集",
+                                    options=["🏠 全品类总览"] + list(DATASETS.keys()), index=0)
 
 
 @st.cache_data(ttl=3600)
@@ -343,6 +345,95 @@ def load_data(use_builtin_flag, selected_ds):
         df["数量_统一"] = 0.0
     return df
 
+
+@st.cache_data(ttl=3600)
+def category_annual():
+    """各品类逐年『完整年度』出口额与数量：月度品类按年汇总且只取满12个月的年份；
+       年度品类直接用。返回列 [品类, 年份, 金额, 数量]。"""
+    rows = []
+    for name, path in DATASETS.items():
+        if not os.path.exists(path):
+            continue
+        df = pd.read_parquet(path)
+        df["统计年份"] = pd.to_numeric(df["统计年份"], errors="coerce").astype("Int64")
+        parts = []
+        if "数据粒度" in df.columns and (df["数据粒度"] == "月度").any():
+            m = df[df["数据粒度"] == "月度"]
+            cnt = m.groupby("统计年份")["月份"].nunique()
+            parts.append(m[m["统计年份"].isin(cnt[cnt >= 12].index)])
+            ann = df[df["数据粒度"] == "年度"]
+            extra = set(ann["统计年份"].dropna().unique()) - set(m["统计年份"].dropna().unique())
+            if extra:
+                parts.append(ann[ann["统计年份"].isin(extra)])
+        else:
+            parts.append(df)
+        g = pd.concat(parts).groupby("统计年份", as_index=False).agg({"金额_美元": "sum", "数量_统一": "sum"})
+        for _, r in g.iterrows():
+            if pd.notna(r["统计年份"]):
+                rows.append({"品类": name, "年份": int(r["统计年份"]),
+                             "金额": float(r["金额_美元"]), "数量": float(r["数量_统一"])})
+    return pd.DataFrame(rows)
+
+
+def render_homepage():
+    ca = category_annual()
+    if ca.empty:
+        st.info("暂无可汇总的品类数据。")
+        return
+    common_latest = int(ca.groupby("品类")["年份"].max().min())  # 各品类都覆盖的公共最新完整年
+    cur = ca[ca["年份"] == common_latest]
+    prev = ca[ca["年份"] == common_latest - 1]
+    tot_cur, tot_prev = cur["金额"].sum(), prev["金额"].sum()
+    yoy = (tot_cur - tot_prev) / tot_prev * 100 if tot_prev else None
+
+    st.markdown(f"### 全品类总览 · {common_latest}年全年")
+    st.caption(f"5 大品类横向对比；月度品类按年汇总、只取满 12 个月的完整年份，统一到 {common_latest}年全年口径")
+    k1, k2, k3 = st.columns(3)
+    k1.metric(f"{common_latest}年全行业出口额", f"{tot_cur/1e8:,.2f}亿美元",
+              delta=(f"{yoy:+.1f}%" if yoy is not None else None))
+    k2.metric("品类数量", int(cur["品类"].nunique()))
+    k3.metric("最大品类", cur.sort_values("金额", ascending=False).iloc[0]["品类"] if not cur.empty else "—")
+
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader(f"{common_latest}年各品类出口额")
+        b = cur.sort_values("金额").copy(); b["金额_亿"] = b["金额"] / 1e8
+        fig = px.bar(b, x="金额_亿", y="品类", orientation="h", text_auto=".2f",
+                     color="品类", color_discrete_sequence=EDIT_SEQ)
+        fig.update_layout(showlegend=False, xaxis_title="金额（亿美元）", yaxis_title="")
+        fig.update_traces(hovertemplate="%{y}<br>%{x:.2f}亿美元<extra></extra>")
+        st.plotly_chart(fig, width='stretch')
+    with c2:
+        st.subheader(f"{common_latest}年品类占比")
+        fig = px.pie(cur, names="品类", values="金额", hole=0.45, color_discrete_sequence=EDIT_SEQ)
+        fig.update_traces(hovertemplate="%{label}<br>%{percent}<extra></extra>")
+        st.plotly_chart(fig, width='stretch')
+
+    st.markdown("---")
+    st.subheader("各品类逐年出口额趋势")
+    st.caption("单位：亿美元；仅完整年份")
+    tr = ca.copy(); tr["金额_亿"] = tr["金额"] / 1e8; tr["年"] = tr["年份"].astype(str)
+    fig = px.line(tr.sort_values("年份"), x="年", y="金额_亿", color="品类",
+                  markers=True, color_discrete_sequence=EDIT_SEQ)
+    fig.update_layout(xaxis_title="", yaxis_title="金额（亿美元）", legend_title_text="")
+    st.plotly_chart(fig, width='stretch')
+
+    st.markdown("---")
+    st.subheader(f"各品类同比增速（{common_latest-1}→{common_latest}）")
+    mm = cur[["品类", "金额"]].merge(prev[["品类", "金额"]], on="品类", suffixes=("_今", "_去"))
+    mm["同比%"] = ((mm["金额_今"] - mm["金额_去"]) / mm["金额_去"].replace(0, np.nan) * 100).round(1)
+    mm = mm.sort_values("同比%")
+    fig = px.bar(mm, x="同比%", y="品类", orientation="h", text_auto=".1f",
+                 color="同比%", color_continuous_scale=["#ff682c", "#e8e8e8", "#816729"])
+    fig.update_layout(coloraxis_showscale=False, xaxis_title="同比%", yaxis_title="")
+    st.plotly_chart(fig, width='stretch')
+
+
+# ---------- 全品类总览首页（在加载单个数据集之前分流）----------
+if selected_dataset == "🏠 全品类总览":
+    render_homepage()
+    st.stop()
 
 export_df = load_data(use_builtin, selected_dataset)
 if export_df is None:
