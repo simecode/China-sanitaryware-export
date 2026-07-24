@@ -573,6 +573,24 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
                                 ["金额_美元", "上年同期"]),
                      width='stretch', hide_index=True)
 
+    # 省份 × 区域 热力图（产区的市场偏好）
+    st.subheader(f"{latest}年{plabel}省份 × 区域 出口热力图")
+    st.caption("行=产地省份（前12），列=目的地区域；颜色=出口额（亿美元），看各省主攻哪些区域")
+    pr = sp[sp["统计年份"] == latest].groupby(["注册地名称", "所属区域"], as_index=False)["金额_美元"].sum()
+    if not pr.empty:
+        topprov = pr.groupby("注册地名称")["金额_美元"].sum().nlargest(12).index
+        prm = pr[pr["注册地名称"].isin(topprov)].copy()
+        prm["金额_亿"] = (prm["金额_美元"] / 1e8).round(2)
+        piv = prm.pivot(index="注册地名称", columns="所属区域", values="金额_亿").fillna(0)
+        piv = piv.loc[prm.groupby("注册地名称")["金额_亿"].sum().sort_values(ascending=False).index]
+        figpr = px.imshow(piv, text_auto=".2f", aspect="auto",
+                          color_continuous_scale=["#faf6f0", "#efd9bf", "#e0a86b", "#ff682c"],
+                          labels=dict(color="亿美元"))
+        figpr.update_xaxes(side="top", title=""); figpr.update_yaxes(title="")
+        figpr.update_traces(hovertemplate="%{y} → %{x}<br>%{z:.2f}亿美元<extra></extra>")
+        figpr.update_layout(margin=dict(t=28, l=0, r=0, b=0), height=max(300, 30 * len(piv) + 70))
+        st.plotly_chart(figpr, width='stretch')
+
     # 出口结构（区域 › 国家）
     st.subheader(f"{latest}年{plabel}出口结构")
     tm = sp[sp["统计年份"] == latest].groupby(["所属区域", "贸易伙伴名称"], as_index=False)["金额_美元"].sum()
@@ -596,6 +614,50 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
     st.subheader(f"{latest}年{plabel}出口流向路径")
     st.caption("产地省份 → 目的地区域 → 目的地国家；带状宽度随出口额（单位：亿美元）")
     render_sankey(sp, latest)
+
+    # 省份 × 区域 热力图（产区的市场偏好）
+    st.markdown("---")
+    st.subheader(f"{latest}年{plabel}省份 × 区域 热力图")
+    st.caption("行=产地省份（前10）、列=目的地区域，颜色=出口额（亿美元）；看各省主攻哪些区域")
+    pv = sp[sp["统计年份"] == latest]
+    if not pv.empty:
+        topprov = pv.groupby("注册地名称")["金额_美元"].sum().nlargest(10).index
+        mat = (pv[pv["注册地名称"].isin(topprov)]
+               .pivot_table(index="注册地名称", columns="所属区域",
+                            values="金额_美元", aggfunc="sum", fill_value=0) / 1e8)
+        if not mat.empty:
+            mat = mat.loc[mat.sum(axis=1).sort_values(ascending=False).index,
+                          mat.sum(axis=0).sort_values(ascending=False).index]
+            figpr = px.imshow(mat, text_auto=".2f", aspect="auto",
+                              color_continuous_scale=["#faf6f0", "#efd9bf", "#e0a86b", "#ff682c"],
+                              labels=dict(color="亿美元"))
+            figpr.update_xaxes(side="top", title=""); figpr.update_yaxes(title="")
+            figpr.update_traces(hovertemplate="%{y} → %{x}<br>%{z:.2f}亿美元<extra></extra>")
+            figpr.update_layout(margin=dict(t=28, l=0, r=0, b=0), height=max(300, 34 * len(mat) + 70))
+            st.plotly_chart(figpr, width='stretch')
+
+    # 市场集中度趋势（前5/前10大目的地合计占比 + HHI）
+    st.markdown("---")
+    st.subheader(f"{plabel}市场集中度趋势")
+    st.caption("前5/前10大目的地合计占比逐年变化；占比越高=出口越依赖少数市场")
+    conc = []
+    for yr, g in sp.groupby("统计年份"):
+        tot = g["金额_美元"].sum()
+        if tot <= 0:
+            continue
+        cs = g.groupby("贸易伙伴名称")["金额_美元"].sum().sort_values(ascending=False) / tot
+        conc.append({"年份": int(yr), "前5大占比%": round(cs.head(5).sum() * 100, 1),
+                     "前10大占比%": round(cs.head(10).sum() * 100, 1)})
+    conc = pd.DataFrame(conc).sort_values("年份") if conc else pd.DataFrame()
+    if len(conc) >= 2:
+        cm = conc.melt(id_vars="年份", value_vars=["前5大占比%", "前10大占比%"],
+                       var_name="口径", value_name="占比%")
+        cm["年"] = cm["年份"].astype(str)
+        figc = px.line(cm, x="年", y="占比%", color="口径", markers=True,
+                       color_discrete_map={"前5大占比%": "#ff682c", "前10大占比%": "#816729"})
+        figc.update_layout(xaxis_title="", yaxis_title="合计占比（%）", legend_title_text="")
+        figc.update_yaxes(ticksuffix="%")
+        st.plotly_chart(figc, width='stretch')
 
     # 出口单价分析（仅在有千克数量的数据集显示；陶瓷 6910 无数量会自动跳过）
     if sp["数量_统一"].sum() > 0:
@@ -631,6 +693,64 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
                                     hovertemplate="%{y}<br>%{x:.2f} 美元/千克<extra></extra>")
                 figu2.update_layout(xaxis_title="单价（美元/千克）", yaxis_title="")
                 st.plotly_chart(figu2, width='stretch')
+
+            st.markdown("---")
+            # 平均单价趋势（升级 or 降价竞争）
+            st.markdown("**平均单价趋势**")
+            st.caption("整体平均单价（金额÷千克）逐年走势；上行=升级/涨价，下行=降价竞争")
+            uptr = (sp.groupby("统计年份", as_index=False).agg({"金额_美元": "sum", "数量_统一": "sum"}))
+            uptr = uptr[uptr["数量_统一"] > 0].copy()
+            uptr["单价"] = (uptr["金额_美元"] / uptr["数量_统一"]).round(2)
+            uptr["年"] = uptr["统计年份"].astype(str)
+            if len(uptr) >= 2:
+                figt = px.line(uptr.sort_values("统计年份"), x="年", y="单价", markers=True)
+                figt.update_traces(line_color="#ff682c",
+                                   hovertemplate="%{x}<br>%{y:.2f} 美元/千克<extra></extra>")
+                figt.update_layout(xaxis_title="", yaxis_title="单价（美元/千克）")
+                st.plotly_chart(figt, width='stretch')
+
+            # 量价拆解：金额变化 = 价格效应 + 数量效应
+            if prev_ok:
+                cur_a = sp[sp["统计年份"] == latest]; prev_a = sp[sp["统计年份"] == prev_year]
+                a1, q1 = cur_a["金额_美元"].sum(), cur_a["数量_统一"].sum()
+                a0, q0 = prev_a["金额_美元"].sum(), prev_a["数量_统一"].sum()
+                if q0 > 0 and q1 > 0:
+                    p0, p1 = a0 / q0, a1 / q1
+                    price_eff = (p1 - p0) * q1
+                    vol_eff = p0 * (q1 - q0)
+                    st.markdown("---")
+                    st.markdown(f"**量价拆解（{prev_year}→{latest}）**")
+                    st.caption("金额变化 = 价格效应（涨/降价）+ 数量效应（多/少卖）")
+                    figw = go.Figure(go.Waterfall(
+                        orientation="v",
+                        measure=["absolute", "relative", "relative", "total"],
+                        x=[f"{prev_year}金额", "价格效应", "数量效应", f"{latest}金额"],
+                        y=[a0 / 1e8, price_eff / 1e8, vol_eff / 1e8, a1 / 1e8],
+                        text=[f"{a0/1e8:.2f}", f"{price_eff/1e8:+.2f}", f"{vol_eff/1e8:+.2f}", f"{a1/1e8:.2f}"],
+                        textposition="outside", connector=dict(line=dict(color="#c9c4b8")),
+                        increasing=dict(marker=dict(color="#816729")),
+                        decreasing=dict(marker=dict(color="#ff682c")),
+                        totals=dict(marker=dict(color="#202020"))))
+                    figw.update_layout(yaxis_title="金额（亿美元）", showlegend=False,
+                                       margin=dict(t=20, l=0, r=0, b=0))
+                    st.plotly_chart(figw, width='stretch')
+
+    # 目的地集中度趋势（HHI）
+    st.markdown("---")
+    st.subheader("目的地集中度趋势（HHI）")
+    st.caption("HHI = 各目的地份额平方和×10000，越高越依赖少数市场（>2500 视为高度集中）")
+    hh = sp.groupby(["统计年份", "贸易伙伴名称"], as_index=False)["金额_美元"].sum()
+    hh["share"] = hh["金额_美元"] / hh.groupby("统计年份")["金额_美元"].transform("sum")
+    hh["sq"] = hh["share"] ** 2
+    hhi = hh.groupby("统计年份", as_index=False)["sq"].sum()
+    hhi["HHI"] = (hhi["sq"] * 10000).round(0)
+    if len(hhi) >= 2:
+        hhi["年"] = hhi["统计年份"].astype(str)
+        figh = px.line(hhi.sort_values("统计年份"), x="年", y="HHI", markers=True)
+        figh.update_traces(line_color="#816729", marker=dict(color="#816729"),
+                           hovertemplate="%{x}<br>HHI %{y:.0f}<extra></extra>")
+        figh.update_layout(xaxis_title="", yaxis_title="HHI")
+        st.plotly_chart(figh, width='stretch')
 
     # ===== 新增分析维度 =====
     if prev_ok:
