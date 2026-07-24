@@ -641,7 +641,7 @@ if not month_df.empty:
             mom_val = fmt_money(_cv)
             mom_delta = f"{(_cv - _pv) / _pv * 100:+.1f}%"
 
-    st.markdown(f"### {latest}年{plabel}全球市场贸易格局透视")
+    st.markdown(f"### {selected_dataset} · {latest}年{plabel}全球市场贸易格局透视")
     ca, cb, cc = st.columns(3)
     ca.metric(f"{latest}年{plabel}出口总额", fmt_money(cur_total),
               delta=(f"{cur_yoy:+.2f}%" if cur_yoy is not None else None))
@@ -795,7 +795,7 @@ else:
     cur_yoy = cur_yoy.iloc[0] if len(cur_yoy) and pd.notna(cur_yoy.iloc[0]) else None
     prev_total = float(annual_a.loc[annual_a["统计年份"] == prev_year, "金额_美元"].sum()) if prev_ok else None
 
-    st.markdown(f"### {latest}年全年全球市场贸易格局透视")
+    st.markdown(f"### {selected_dataset} · {latest}年全年全球市场贸易格局透视")
     ca, cb, cc = st.columns(3)
     ca.metric(f"{latest}年出口总额", fmt_money(cur_total),
               delta=(f"{cur_yoy:+.2f}%" if cur_yoy is not None else None))
