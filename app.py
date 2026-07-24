@@ -156,6 +156,7 @@ def render_sankey(dfp, latest_year, top_prov=8, top_ctry=12):
 DATASETS = {
     "卫生陶瓷": "data/default_6910.parquet",
     "龙头": "data/default_faucet.parquet",
+    "塑料卫浴": "data/default_plastic.parquet",
 }
 
 st.set_page_config(page_title="贸易可视化地图", layout="wide",

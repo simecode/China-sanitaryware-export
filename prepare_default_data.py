@@ -114,6 +114,15 @@ if os.path.exists(MAPPING_FILE):
         print(f"⚠️ 映射表读取异常（区域将归为「其他」）：{e}")
 
 
+# 数据集配置：名称 → (文件名匹配函数, 输出parquet名)
+DATASET_MATCHERS = {
+    "6910":   (lambda b: "6910" in b,                                        "6910"),
+    "水龙头":  (lambda b: "faucet" in b.lower() or "水龙头" in b,                "faucet"),
+    # 塑料卫浴：合并 39221000(浴缸/淋浴盘/洗涤槽/脸盆) + 39222000(坐便器盖) + 39229000(其他)
+    "塑料卫浴": (lambda b: b.startswith(("39221000", "39222000", "39229000")), "plastic"),
+}
+
+
 def process_files(dataset_name):
     files = []
     for root, _, fnames in os.walk(RAW_DATA_FOLDER):
@@ -121,11 +130,8 @@ def process_files(dataset_name):
             if f.lower().endswith(('.xlsx', '.xls')):
                 files.append(os.path.join(root, f))
 
-    if dataset_name == "6910":
-        targets = [f for f in files if "6910" in os.path.basename(f)]
-    else:
-        targets = [f for f in files
-                   if "faucet" in os.path.basename(f).lower() or "水龙头" in os.path.basename(f)]
+    matcher, out_name = DATASET_MATCHERS[dataset_name]
+    targets = [f for f in files if matcher(os.path.basename(f))]
 
     print(f"\n📦 数据集 [{dataset_name}]：匹配到 {len(targets)} 个文件")
     all_data = []
@@ -137,21 +143,23 @@ def process_files(dataset_name):
                 continue
             cmap = match_columns(list(df.columns), FIELD_SPECS)
 
-            year_col = cmap.get("统计年份")
-            year_str = extract_year(df, year_col, fname)
-            if not year_str:
-                year_str = extract_year(df, cmap.get("数据年月"), fname)
+            # —— 月份 + 年份：有『数据年月』就以它为准（逐行取年/月），
+            #    否则靠年份列/文件名。避免文件名里 HS 编码含"2000"等被误判为年份。——
+            if "数据年月" in cmap:
+                month = parse_month_series(df[cmap["数据年月"]])
+                year_series = pd.to_numeric(
+                    df[cmap["数据年月"]].astype(str).str.extract(r'(20\d{2})')[0], errors="coerce")
+                granularity = "月度"
+                year_str = str(int(year_series.dropna().mode()[0])) if year_series.notna().any() else None
+            else:
+                month = pd.Series(np.nan, index=df.index)
+                year_series = None
+                granularity = "年度"
+                year_col = cmap.get("统计年份")
+                year_str = extract_year(df, year_col, fname)
             if not year_str:
                 print(f"  ⚠️ {fname} 无法确定年份，跳过")
                 continue
-
-            # —— 月份：只在真有『数据年月』源列时解析；否则留空（不再伪造 -01）——
-            if "数据年月" in cmap:
-                month = parse_month_series(df[cmap["数据年月"]])
-                granularity = "月度"
-            else:
-                month = pd.Series(np.nan, index=df.index)
-                granularity = "年度"
 
             # 重命名其它字段
             rename_map = {src: key for key, src in cmap.items()
@@ -159,7 +167,8 @@ def process_files(dataset_name):
             df = df.rename(columns=rename_map)
 
             # 关键维度补齐
-            df["统计年份"] = int(year_str)
+            df["统计年份"] = (year_series.astype("Int64").values
+                            if year_series is not None else int(year_str))
             df["月份"] = month.values
             df["数据粒度"] = granularity
             df["贸易类型"] = "出口"
@@ -223,7 +232,6 @@ def process_files(dataset_name):
                   .agg({"金额_美元": "sum", "数量_统一": "sum"}))
     final["贸易类型"] = "出口"
 
-    out_name = "6910" if dataset_name == "6910" else "faucet"
     out_path = os.path.join(OUTPUT_DIR, f"default_{out_name}.parquet")
     final.to_parquet(out_path, compression="snappy", index=False)
     span = final.groupby(["统计年份", "数据粒度"]).size().to_dict()
@@ -233,4 +241,5 @@ def process_files(dataset_name):
 
 process_files("6910")
 process_files("水龙头")
+process_files("塑料卫浴")
 print("\n✅ 全部完成。提醒：要做『前N月同比』，每个对比年份都需有对应的月度文件(含数据年月)。")
