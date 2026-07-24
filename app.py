@@ -438,6 +438,29 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
                            ["金额_美元", "上年同期"])
         st.dataframe(tshow, width='stretch', hide_index=True)
 
+    # 目的地集中度（帕累托：降序柱 + 累计占比线）
+    st.subheader(f"{latest}年{plabel}目的地集中度（帕累托）")
+    st.caption("柱=各国出口额（降序，取前20），橙线=累计占比%；看前几国占了多少、依赖是否集中")
+    par = (partner_sp[partner_sp["统计年份"] == latest][["贸易伙伴名称", "金额_美元"]]
+           .sort_values("金额_美元", ascending=False).head(20).copy())
+    if not par.empty:
+        tot_par = partner_sp.loc[partner_sp["统计年份"] == latest, "金额_美元"].sum()
+        par["金额_亿"] = par["金额_美元"] / 1e8
+        par["累计占比%"] = (par["金额_美元"].cumsum() / tot_par * 100).round(1) if tot_par else 0
+        figp = px.bar(par, x="贸易伙伴名称", y="金额_亿")
+        figp.update_traces(marker_color="#c9a227",
+                           hovertemplate="%{x}<br>%{y:.2f}亿美元<extra></extra>")
+        figp.add_scatter(x=par["贸易伙伴名称"], y=par["累计占比%"], name="累计占比%", yaxis="y2",
+                         mode="lines+markers", line=dict(color="#ff682c"),
+                         hovertemplate="%{x}<br>累计 %{y:.1f}%<extra></extra>")
+        figp.update_layout(
+            yaxis=dict(title="出口额（亿美元）"),
+            yaxis2=dict(title="累计占比%", overlaying="y", side="right", range=[0, 101],
+                        ticksuffix="%", showgrid=False),
+            xaxis=dict(title="", tickangle=-35),
+            legend=dict(orientation="h", y=1.12))
+        st.plotly_chart(figp, width='stretch')
+
     # 区域
     st.subheader(f"{latest}年{plabel}区域分布")
     rnow = region_sp[region_sp["统计年份"] == latest].sort_values("金额_美元", ascending=False)
@@ -576,6 +599,22 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
                 ft = disp_money(fallers[["贸易伙伴名称","所属区域","今年","去年","金额同比%"]], ["今年","去年"])
                 ft.columns = ["贸易伙伴名称","所属区域","今年出口额（亿美元）","去年出口额（亿美元）","同比%"]
                 st.dataframe(ft, width='stretch', hide_index=True)
+
+        st.markdown("---")
+
+        # ── 4. 市场组合气泡图（出口额 × 同比增速 × 份额）──────────────
+        st.subheader("市场组合气泡图")
+        st.caption("横轴=今年出口额，纵轴=同比增速%，气泡大小=份额；右上=大而增，右下=大而降。仅含有真实体量的市场。")
+        bub = p_join[p_join["今年"] >= base_floor].dropna(subset=["金额同比%"]).copy()
+        if not bub.empty:
+            bub["出口额_亿"] = (bub["今年"] / 1e8).round(3)
+            bub["份额%"] = (bub["今年"] / cur_total * 100).round(2) if cur_total else 0
+            figb = px.scatter(bub, x="出口额_亿", y="金额同比%", size="份额%", color="所属区域",
+                              hover_name="贸易伙伴名称", size_max=42,
+                              hover_data={"出口额_亿": ":.2f", "金额同比%": ":.1f", "份额%": ":.2f"})
+            figb.add_hline(y=0, line_color="#c9c4b8", line_width=1)
+            figb.update_layout(xaxis_title="今年出口额（亿美元）", yaxis_title="同比增速%")
+            st.plotly_chart(figb, width='stretch')
 
 
 # ================= 主体 =================
@@ -722,6 +761,25 @@ if not month_df.empty:
                               ["金额_美元", "上年同期"])
             show.columns = ["年份", f"{plabel}出口额（亿美元）", "上年同期（亿美元）", "同比%"]
             st.dataframe(show, width='stretch', hide_index=True)
+
+    # 月度出口热力图（年 × 月，看季节性）
+    st.subheader("月度出口热力图（年 × 月）")
+    st.caption("行=年份、列=月份，颜色深浅=出口额（亿美元）；一眼看清季节性与年际强弱")
+    hm = month_df_sel.groupby(["统计年份", "月份"], as_index=False)["金额_美元"].sum()
+    if not hm.empty:
+        hm["金额_亿"] = (hm["金额_美元"] / 1e8).round(2)
+        pivot = hm.pivot(index="统计年份", columns="月份", values="金额_亿").sort_index(ascending=False)
+        pivot.index = [str(int(y)) for y in pivot.index]
+        pivot.columns = [f"{int(c)}月" for c in pivot.columns]
+        figh = px.imshow(pivot, text_auto=".2f", aspect="auto",
+                         color_continuous_scale=["#faf6f0", "#efd9bf", "#e0a86b", "#ff682c"],
+                         labels=dict(color="亿美元"))
+        figh.update_xaxes(side="top", title="")
+        figh.update_yaxes(title="")
+        figh.update_traces(hovertemplate="%{y}年 %{x}<br>%{z:.2f}亿美元<extra></extra>")
+        figh.update_layout(margin=dict(t=28, l=0, r=0, b=0),
+                           height=max(260, 34 * len(pivot) + 70))
+        st.plotly_chart(figh, width='stretch')
 
     render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_year, prev_ok, plabel, cur_total)
 
