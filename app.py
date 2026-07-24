@@ -523,7 +523,8 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
             avg_price = up["金额_美元"].sum() / up["数量_统一"].sum()
             cu1, cu2 = st.columns([3, 2])
             with cu1:
-                st.markdown("**单价 × 出口额**（气泡=出口额）")
+                st.markdown("**单价 × 出口额**")
+                st.caption("气泡=出口额；越靠上=价值密度越高")
                 figu = px.scatter(ups, x="出口额_亿", y="单价", size="出口额_亿",
                                   color="所属区域", hover_name="贸易伙伴名称", size_max=40,
                                   hover_data={"出口额_亿": ":.2f", "单价": ":.2f"})
