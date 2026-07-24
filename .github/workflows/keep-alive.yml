@@ -1,0 +1,23 @@
+name: keep-alive
+
+# 定时访问 Streamlit 应用，防止免费版因闲置而休眠。
+# 运行在 GitHub 服务器上（不占用你的电脑），公开仓库不消耗 Actions 额度。
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # 每 10 分钟一次（GitHub 排队时可能延迟到 10~20 分钟）
+  workflow_dispatch:          # 也支持手动触发
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping app to keep it awake
+        run: |
+          URL="https://tradevisualizationmap.streamlit.app/"
+          for i in 1 2 3 4; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 90 "$URL" || echo "000")
+            echo "attempt $i -> HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 25
+          done
+          echo "app did not return 200 after retries (可能正在冷启动)"
