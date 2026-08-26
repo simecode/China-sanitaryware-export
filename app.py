@@ -695,19 +695,22 @@ def render_period_analysis(sp, partner_sp, province_sp, region_sp, latest, prev_
 
     # 目的地集中度（帕累托：降序柱 + 累计占比线）
     st.subheader(f"{latest}年{plabel}目的地集中度（帕累托）")
-    st.caption("柱=各国出口额（降序，取前20），橙线=累计占比%；看前几国占了多少、依赖是否集中")
+    st.caption("柱=各国出口额（降序取前20）；橙线=累计占比（前N名合计、只增不减，不是单个国家的占比）")
     par = (partner_sp[partner_sp["统计年份"] == latest][["贸易伙伴名称", "金额_美元"]]
-           .sort_values("金额_美元", ascending=False).head(20).copy())
+           .sort_values("金额_美元", ascending=False).head(20).reset_index(drop=True).copy())
     if not par.empty:
         tot_par = partner_sp.loc[partner_sp["统计年份"] == latest, "金额_美元"].sum()
         par["金额_亿"] = par["金额_美元"] / 1e8
+        par["占比%"] = (par["金额_美元"] / tot_par * 100).round(1) if tot_par else 0
         par["累计占比%"] = (par["金额_美元"].cumsum() / tot_par * 100).round(1) if tot_par else 0
-        figp = px.bar(par, x="贸易伙伴名称", y="金额_亿")
+        par["名次"] = par.index + 1
+        figp = px.bar(par, x="贸易伙伴名称", y="金额_亿", custom_data=["占比%"])
         figp.update_traces(marker_color="#c9a227",
-                           hovertemplate="%{x}<br>%{y:.2f}亿美元<extra></extra>")
-        figp.add_scatter(x=par["贸易伙伴名称"], y=par["累计占比%"], name="累计占比%", yaxis="y2",
+                           hovertemplate="%{x}<br>出口额 %{y:.2f}亿美元<br>本国占比 %{customdata[0]:.1f}%<extra></extra>")
+        figp.add_scatter(x=par["贸易伙伴名称"], y=par["累计占比%"], name="累计占比（前N名合计）", yaxis="y2",
                          mode="lines+markers", line=dict(color="#ff682c"),
-                         hovertemplate="%{x}<br>累计 %{y:.1f}%<extra></extra>")
+                         customdata=par[["名次", "占比%"]].values,
+                         hovertemplate="前 %{customdata[0]} 名累计 %{y:.1f}%<br>（%{x} 本国仅占 %{customdata[1]:.1f}%）<extra></extra>")
         figp.update_layout(
             yaxis=dict(title="出口额（亿美元）"),
             yaxis2=dict(title="累计占比%", overlaying="y", side="right", range=[0, 101],
