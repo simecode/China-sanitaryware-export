@@ -161,6 +161,24 @@ DATASETS = {
     "其他钢制卫浴": "data/default_steel_other.parquet",
 }
 HOME_KEY = "🏠 全品类总览"
+GLOBAL_KEY = "🌍 全球份额"
+
+# ISO3 → ISO2（用于 flagcdn 国旗图标）；覆盖主要出口国，缺失则不显示旗
+ISO3_TO_2 = {
+    "CHN": "cn", "DEU": "de", "USA": "us", "ITA": "it", "MEX": "mx", "TUR": "tr", "POL": "pl",
+    "ESP": "es", "FRA": "fr", "GBR": "gb", "IND": "in", "JPN": "jp", "KOR": "kr", "MYS": "my",
+    "THA": "th", "SGP": "sg", "NLD": "nl", "PRT": "pt", "SWE": "se", "AUT": "at", "CZE": "cz",
+    "BGR": "bg", "SVN": "si", "CAN": "ca", "EGY": "eg", "MAR": "ma", "VNM": "vn", "IDN": "id",
+    "BRA": "br", "BEL": "be", "CHE": "ch", "DNK": "dk", "FIN": "fi", "GRC": "gr", "HUN": "hu",
+    "IRL": "ie", "ROU": "ro", "SVK": "sk", "HRV": "hr", "LTU": "lt", "LVA": "lv", "EST": "ee",
+    "NOR": "no", "RUS": "ru", "UKR": "ua", "BLR": "by", "SAU": "sa", "ARE": "ae", "ISR": "il",
+    "QAT": "qa", "KWT": "kw", "JOR": "jo", "LBN": "lb", "IRN": "ir", "IRQ": "iq", "PAK": "pk",
+    "BGD": "bd", "LKA": "lk", "NPL": "np", "PHL": "ph", "KHM": "kh", "MMR": "mm", "AUS": "au",
+    "NZL": "nz", "ZAF": "za", "NGA": "ng", "KEN": "ke", "GHA": "gh", "TUN": "tn", "DZA": "dz",
+    "ARG": "ar", "CHL": "cl", "COL": "co", "PER": "pe", "ECU": "ec", "URY": "uy", "CRI": "cr",
+    "GTM": "gt", "PAN": "pa", "DOM": "do", "HKG": "hk", "TWN": "tw", "LUX": "lu", "SRB": "rs",
+    "CYP": "cy", "MLT": "mt", "OMN": "om", "BHR": "bh", "UZB": "uz", "KAZ": "kz",
+}
 
 st.set_page_config(page_title="贸易可视化地图", layout="wide",
                    page_icon=(LOGO_PATH or "📊"))
@@ -190,6 +208,9 @@ html, body, [data-testid="stAppViewContainer"] *, [data-testid="stSidebar"] * { 
 
 /* 侧边栏：Ash 暖灰面 */
 [data-testid="stSidebar"]{ background:var(--ash); border-right:1px solid var(--mist); }
+/* 侧栏底部留白，避免最后一个控件贴底、手机上难滚动 */
+section[data-testid="stSidebar"] > div:first-child,
+[data-testid="stSidebarUserContent"]{ padding-bottom:4rem !important; }
 [data-testid="stSidebar"] .stMarkdown hr{ border-color:var(--mist); }
 [data-testid="stSidebar"] h2,[data-testid="stSidebar"] h3{
   color:var(--slate) !important; font-size:.72rem !important; font-weight:600;
@@ -304,7 +325,7 @@ with st.sidebar:
     st.header("数据来源")
     use_builtin = True
     selected_dataset = st.selectbox("选择数据集",
-                                    options=["🏠 全品类总览"] + list(DATASETS.keys()), index=0)
+                                    options=[HOME_KEY, GLOBAL_KEY] + list(DATASETS.keys()), index=0)
 
 
 @st.cache_data(ttl=3600)
@@ -375,44 +396,71 @@ def category_annual():
     return pd.DataFrame(rows)
 
 
-def render_homepage():
-    ca = category_annual()
-    if ca.empty:
-        st.info("暂无可汇总的品类数据。")
-        return
-    common_latest = int(ca.groupby("品类")["年份"].max().min())  # 各品类都覆盖的公共最新完整年
-    cur = ca[ca["年份"] == common_latest]
-    prev = ca[ca["年份"] == common_latest - 1]
-    tot_cur, tot_prev = cur["金额"].sum(), prev["金额"].sum()
-    yoy = (tot_cur - tot_prev) / tot_prev * 100 if tot_prev else None
+@st.cache_data(ttl=3600)
+def category_latest():
+    """各『月度』品类的最新同口径期间（如2026前7月）今年额与去年同期额；纯年度品类(龙头)不含。"""
+    rows = []
+    for name, path in DATASETS.items():
+        if not os.path.exists(path):
+            continue
+        df = pd.read_parquet(path)
+        if "数据粒度" not in df.columns:
+            continue
+        m = df[df["数据粒度"] == "月度"].copy()
+        if m.empty:
+            continue
+        m["统计年份"] = pd.to_numeric(m["统计年份"], errors="coerce")
+        latest = int(m["统计年份"].max())
+        months = sorted(int(x) for x in m.loc[m["统计年份"] == latest, "月份"].dropna().unique())
+        cur = m[(m["统计年份"] == latest) & (m["月份"].isin(months))]["金额_美元"].sum()
+        prev = m[(m["统计年份"] == latest - 1) & (m["月份"].isin(months))]["金额_美元"].sum()
+        rows.append({"品类": name, "最新年": latest, "月数": len(months),
+                     "今年": float(cur), "去年同期": float(prev)})
+    return pd.DataFrame(rows)
 
-    st.markdown(f"### 全品类总览 · {common_latest}年全年")
-    st.caption(f"5 大品类横向对比；月度品类按年汇总、只取满 12 个月的完整年份，统一到 {common_latest}年全年口径")
+
+def render_homepage():
+    lp = category_latest()   # 月度品类的最新同口径快照（2026前N月）
+    ca = category_annual()   # 全部品类逐年（完整年，趋势用，含龙头）
+    if lp.empty:
+        st.info("暂无月度品类数据。")
+        return
+    ly = int(lp["最新年"].max()); nmon = int(lp["月数"].max())
+    plabel = f"{ly}年前{nmon}月"
+    excluded = [n for n in DATASETS if n not in set(lp["品类"])]  # 龙头等纯年度品类
+    cur_tot, prev_tot = lp["今年"].sum(), lp["去年同期"].sum()
+    yoy = (cur_tot - prev_tot) / prev_tot * 100 if prev_tot else None
+
+    st.markdown(f"### 全品类总览 · {plabel}")
+    note = f"{plabel}同口径横向对比"
+    if excluded:
+        note += f"；{'、'.join(excluded)}为年度数据暂无月度，未纳入本快照（见下方逐年趋势）"
+    st.caption(note)
     k1, k2, k3 = st.columns(3)
-    k1.metric(f"{common_latest}年全行业出口额", f"{tot_cur/1e8:,.2f}亿美元",
+    k1.metric(f"{plabel}出口额", f"{cur_tot/1e8:,.2f}亿美元",
               delta=(f"{yoy:+.1f}%" if yoy is not None else None))
-    k2.metric("品类数量", int(cur["品类"].nunique()))
-    k3.metric("最大品类", cur.sort_values("金额", ascending=False).iloc[0]["品类"] if not cur.empty else "—")
+    k2.metric("参与品类", int(lp["品类"].nunique()))
+    k3.metric("最大品类", lp.sort_values("今年", ascending=False).iloc[0]["品类"])
 
     st.markdown("---")
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader(f"{common_latest}年各品类出口额")
-        b = cur.sort_values("金额").copy(); b["金额_亿"] = b["金额"] / 1e8
+        st.subheader(f"{plabel}各品类出口额")
+        b = lp.sort_values("今年").copy(); b["金额_亿"] = b["今年"] / 1e8
         fig = px.bar(b, x="金额_亿", y="品类", orientation="h", text_auto=".2f",
                      color="品类", color_discrete_sequence=EDIT_SEQ)
         fig.update_layout(showlegend=False, xaxis_title="金额（亿美元）", yaxis_title="")
         fig.update_traces(hovertemplate="%{y}<br>%{x:.2f}亿美元<extra></extra>")
         st.plotly_chart(fig, width='stretch')
     with c2:
-        st.subheader(f"{common_latest}年品类占比")
-        fig = px.pie(cur, names="品类", values="金额", hole=0.45, color_discrete_sequence=EDIT_SEQ)
+        st.subheader(f"{plabel}品类占比")
+        fig = px.pie(lp, names="品类", values="今年", hole=0.45, color_discrete_sequence=EDIT_SEQ)
         fig.update_traces(hovertemplate="%{label}<br>%{percent}<extra></extra>")
         st.plotly_chart(fig, width='stretch')
 
     st.markdown("---")
     st.subheader("各品类逐年出口额趋势")
-    st.caption("单位：亿美元；仅完整年份")
+    st.caption("单位：亿美元；完整年份（含龙头）")
     tr = ca.copy(); tr["金额_亿"] = tr["金额"] / 1e8; tr["年"] = tr["年份"].astype(str)
     fig = px.line(tr.sort_values("年份"), x="年", y="金额_亿", color="品类",
                   markers=True, color_discrete_sequence=EDIT_SEQ)
@@ -420,19 +468,129 @@ def render_homepage():
     st.plotly_chart(fig, width='stretch')
 
     st.markdown("---")
-    st.subheader(f"各品类同比增速（{common_latest-1}→{common_latest}）")
-    mm = cur[["品类", "金额"]].merge(prev[["品类", "金额"]], on="品类", suffixes=("_今", "_去"))
-    mm["同比%"] = ((mm["金额_今"] - mm["金额_去"]) / mm["金额_去"].replace(0, np.nan) * 100).round(1)
-    mm = mm.sort_values("同比%")
-    fig = px.bar(mm, x="同比%", y="品类", orientation="h", text_auto=".1f",
+    st.subheader(f"各品类同比增速（{plabel} vs 去年同期）")
+    g = lp.copy()
+    g["同比%"] = ((g["今年"] - g["去年同期"]) / g["去年同期"].replace(0, np.nan) * 100).round(1)
+    g = g.sort_values("同比%")
+    fig = px.bar(g, x="同比%", y="品类", orientation="h", text_auto=".1f",
                  color="同比%", color_continuous_scale=["#ff682c", "#e8e8e8", "#816729"])
     fig.update_layout(coloraxis_showscale=False, xaxis_title="同比%", yaxis_title="")
     st.plotly_chart(fig, width='stretch')
 
 
+@st.cache_data(ttl=3600)
+def load_global():
+    """读取 raw_data/comtrade/*_global.parquet（UN Comtrade 全球各国出口）。"""
+    import glob
+    files = glob.glob("raw_data/comtrade/*_global.parquet")
+    if not files:
+        return pd.DataFrame()
+    g = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    g = g[~g["报告方"].isin(["World"])].copy()
+    g["年份"] = pd.to_numeric(g["年份"], errors="coerce").astype("Int64")
+    g["出口额USD"] = pd.to_numeric(g["出口额USD"], errors="coerce").fillna(0)
+    return g
+
+
+def render_global():
+    g = load_global()
+    if g.empty:
+        st.info("暂无全球数据。请先运行 `python fetch_comtrade.py` 拉取 UN Comtrade 数据。")
+        return
+    cats = list(g["品类"].unique())
+    # 只保留中国有上报的年份，避免各国未报齐时份额失真
+    cn_years = sorted(int(y) for y in g.loc[g["报告方"] == "China", "年份"].dropna().unique())
+    with st.sidebar:
+        st.markdown("---")
+        st.header("全球视图")
+        cat = st.selectbox("品类", cats, index=0)
+        year = st.selectbox("年份", cn_years[::-1], index=0)
+
+    d = g[(g["品类"] == cat) & (g["年份"] == year)]
+    agg = (d.groupby(["报告方", "ISO"], as_index=False)["出口额USD"].sum()
+           .sort_values("出口额USD", ascending=False).reset_index(drop=True))
+    world = agg["出口额USD"].sum()
+    cn_val = float(agg.loc[agg["报告方"] == "China", "出口额USD"].sum())
+    cn_idx = agg.index[agg["报告方"] == "China"]
+    cn_rank = int(cn_idx[0]) + 1 if len(cn_idx) else None
+    cn_share = cn_val / world * 100 if world else 0
+
+    st.markdown(f"### {GLOBAL_KEY} · {cat} · {year}年")
+    st.caption("数据源：UN Comtrade（各国对世界出口额，HS 6位）；份额 = 该国出口额 ÷ 全球出口额")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("全球出口额", f"{world/1e8:,.1f}亿美元")
+    k2.metric("中国出口额", f"{cn_val/1e8:,.1f}亿美元")
+    k3.metric("中国份额", f"{cn_share:.1f}%")
+    k4.metric("中国排名", f"第 {cn_rank} 名" if cn_rank else "—")
+
+    st.markdown("---")
+    st.subheader("各国出口排名 TOP15")
+    top = agg.head(15).copy()
+    top.insert(0, "排名", range(1, len(top) + 1))
+    top["国旗"] = top["ISO"].map(lambda i: f"https://flagcdn.com/w40/{ISO3_TO_2[i]}.png" if i in ISO3_TO_2 else "")
+    top["出口额（亿美元）"] = (top["出口额USD"] / 1e8).round(2)
+    top["份额%"] = (top["出口额USD"] / world * 100).round(1)
+    rows_html = []
+    for _, rw in top.iterrows():
+        flag = (f'<img src="{rw["国旗"]}" alt="{ISO3_TO_2.get(rw["ISO"], "").upper()}" '
+                f'style="width:26px;height:auto;border:1px solid #e8e8e8;border-radius:2px;vertical-align:middle">'
+                if rw["国旗"] else "")
+        cls = ' class="cn"' if rw["报告方"] == "China" else ""
+        rows_html.append(
+            f'<tr{cls}><td>{rw["排名"]}</td><td>{flag}</td><td>{rw["报告方"]}</td>'
+            f'<td style="text-align:right">{rw["出口额USD"]/1e8:.2f} 亿</td>'
+            f'<td style="text-align:right">{rw["出口额USD"]/world*100:.1f}%</td></tr>')
+    st.markdown(
+        '<style>.rank{width:100%;border-collapse:collapse;font-size:.9rem}'
+        '.rank th,.rank td{padding:8px 12px;border-bottom:1px solid #eee}'
+        '.rank th{color:#828282;font-weight:600;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;text-align:left}'
+        '.rank tr.cn{background:rgba(255,104,44,.10);font-weight:700}</style>'
+        '<table class="rank"><thead><tr><th>#</th><th>旗</th><th>国家/地区</th>'
+        '<th style="text-align:right">出口额</th><th style="text-align:right">份额</th></tr></thead><tbody>'
+        + "".join(rows_html) + '</tbody></table>',
+        unsafe_allow_html=True)
+
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        st.subheader("份额条形图 TOP15")
+        b = top.sort_values("出口额USD").copy()
+        b["c"] = np.where(b["报告方"] == "China", "中国", "其他")
+        figb = px.bar(b, x="份额%", y="报告方", orientation="h", text_auto=".1f",
+                      color="c", color_discrete_map={"中国": "#ff682c", "其他": "#c9c4b8"})
+        figb.update_layout(showlegend=False, xaxis_title="份额%", yaxis_title="")
+        st.plotly_chart(figb, width='stretch')
+    with c2:
+        st.subheader("中国 vs 世界其他")
+        pie = pd.DataFrame({"x": ["中国", "其他国家"], "v": [cn_val, max(world - cn_val, 0)]})
+        figp = px.pie(pie, names="x", values="v", hole=0.5,
+                      color="x", color_discrete_map={"中国": "#ff682c", "其他国家": "#c9c4b8"})
+        figp.update_traces(hovertemplate="%{label}<br>%{percent}<extra></extra>")
+        st.plotly_chart(figp, width='stretch')
+
+    st.markdown("---")
+    st.subheader("中国全球份额逐年趋势")
+    tr = g[g["品类"] == cat]
+    yr_tot = tr.groupby("年份")["出口额USD"].sum()
+    cn_tot = tr[tr["报告方"] == "China"].groupby("年份")["出口额USD"].sum()
+    sh = (cn_tot / yr_tot * 100).dropna().reset_index()
+    sh.columns = ["年份", "中国份额%"]
+    sh = sh[sh["年份"].isin(cn_years)]
+    if len(sh) >= 2:
+        sh["年"] = sh["年份"].astype(str)
+        figt = px.line(sh.sort_values("年份"), x="年", y="中国份额%", markers=True)
+        figt.update_traces(line_color="#ff682c", marker=dict(color="#ff682c"),
+                           hovertemplate="%{x}<br>中国份额 %{y:.1f}%<extra></extra>")
+        figt.update_yaxes(ticksuffix="%"); figt.update_layout(xaxis_title="", yaxis_title="中国份额%")
+        st.plotly_chart(figt, width='stretch')
+
+
 # ---------- 全品类总览首页（在加载单个数据集之前分流）----------
-if selected_dataset == "🏠 全品类总览":
+if selected_dataset == HOME_KEY:
     render_homepage()
+    st.stop()
+
+if selected_dataset == GLOBAL_KEY:
+    render_global()
     st.stop()
 
 export_df = load_data(use_builtin, selected_dataset)

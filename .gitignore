@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 python
+
+.comtrade_key
+raw_data/comtrade/*_raw.csv
+raw_data/全球塑料洁具出口/
+raw_data/全球水龙头/
