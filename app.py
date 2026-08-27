@@ -295,14 +295,6 @@ hr{ border-color:var(--mist); }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= 顶部页头 =================
-st.markdown("""
-<div class="top-banner">
-  <h1>贸易可视化地图</h1>
-  <div class="subtitle">Trade Visualization · 卫浴与泛家居出口 · 中国海关数据</div>
-</div>
-""", unsafe_allow_html=True)
-
 # ================= 侧边栏 =================
 with st.sidebar:
     if LOGO_B64:
@@ -326,6 +318,15 @@ with st.sidebar:
     use_builtin = True
     selected_dataset = st.selectbox("选择数据集",
                                     options=[HOME_KEY, GLOBAL_KEY] + list(DATASETS.keys()), index=0)
+
+# ================= 顶部页头（数据源随视图变）=================
+_src = "联合国 UN Comtrade 数据" if selected_dataset == GLOBAL_KEY else "中国海关数据"
+st.markdown(f"""
+<div class="top-banner">
+  <h1>贸易可视化地图</h1>
+  <div class="subtitle">Trade Visualization · 卫浴与泛家居出口 · {_src}</div>
+</div>
+""", unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3600)
