@@ -480,10 +480,9 @@ def render_homepage():
 
 
 @st.cache_data(ttl=3600)
-def load_global():
+def _load_global_cached(file_versions):
     """读取 raw_data/comtrade/*_global.parquet（UN Comtrade 全球各国出口）。"""
-    import glob
-    files = glob.glob("raw_data/comtrade/*_global.parquet")
+    files = [path for path, _, _ in file_versions]
     if not files:
         return pd.DataFrame()
     g = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
@@ -493,11 +492,20 @@ def load_global():
     return g
 
 
+def load_global():
+    """Invalidate cached data whenever the deployed files change."""
+    import glob
+    files = sorted(glob.glob("raw_data/comtrade/*_global.parquet"))
+    versions = tuple((p, os.stat(p).st_mtime_ns, os.stat(p).st_size) for p in files)
+    return _load_global_cached(versions)
+
+
 def render_global():
     g = load_global()
     if g.empty:
         st.info("暂无全球数据。请先运行 `python fetch_comtrade.py` 拉取 UN Comtrade 数据。")
         return
+    st.caption(f"Comtrade 数据范围：{int(g['年份'].min())}–{int(g['年份'].max())} 年 · {len(g):,} 条记录")
     cats = list(g["品类"].unique())
     # 只保留中国有上报的年份，避免各国未报齐时份额失真
     cn_years = sorted(int(y) for y in g.loc[g["报告方"] == "China", "年份"].dropna().unique())
