@@ -399,7 +399,7 @@ def category_annual():
 
 @st.cache_data(ttl=3600)
 def category_latest():
-    """各『月度』品类的最新同口径期间（如2026前7月）今年额与去年同期额；纯年度品类(龙头)不含。"""
+    """各『月度』品类的最新同口径期间（如2026前10月）今年额与去年同期额；纯年度品类(龙头)不含。"""
     rows = []
     for name, path in DATASETS.items():
         if not os.path.exists(path):
